@@ -20,6 +20,10 @@ public class DocumentService {
             "(## News:\\s*\\n)(.*?)(\\n\\n|\\n(?=##)|$)",
             Pattern.DOTALL
     );
+    private static final Pattern YOUTUBE_SECTION_PATTERN = Pattern.compile(
+            "(## YouTube:\\s*\\n)(.*?)(\\n\\n|\\n(?=##)|$)",
+            Pattern.DOTALL
+    );
 
     public void createNewDocument(String filename) throws IOException {
         Path path = Path.of(filename != null ? filename : DEFAULT_FILENAME);
@@ -33,6 +37,8 @@ public class DocumentService {
                 ## Recent Enterprise Releases:
                 
                 ## Releases coming soon:
+                
+                ## YouTube:
                 
                 ## Demos:
                 
@@ -77,6 +83,48 @@ public class DocumentService {
         StringBuilder sb = new StringBuilder();
         for (RssService.NewsItem item : newsItems) {
             sb.append(item.toString()).append("\n");
+        }
+        return sb.toString();
+    }
+
+    public void updateYouTubeSection(String filename, List<YouTubeService.YouTubeVideo> videos) throws IOException {
+        Path path = Path.of(filename != null ? filename : DEFAULT_FILENAME);
+
+        if (!Files.exists(path)) {
+            createNewDocument(filename);
+        }
+
+        String content = Files.readString(path);
+        String youtubeSection = buildYouTubeSection(videos);
+
+        Matcher matcher = YOUTUBE_SECTION_PATTERN.matcher(content);
+        if (matcher.find()) {
+            String updatedContent = content.substring(0, matcher.start(2)) +
+                    youtubeSection +
+                    content.substring(matcher.end(2));
+            Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
+        } else {
+            // If no YouTube section found, add it before the Demos section
+            Pattern demosPattern = Pattern.compile("(## Demos:\\s*\\n)", Pattern.DOTALL);
+            Matcher demosMatcher = demosPattern.matcher(content);
+            
+            if (demosMatcher.find()) {
+                String updatedContent = content.substring(0, demosMatcher.start()) +
+                        "## YouTube:\n\n" + youtubeSection + "\n" +
+                        content.substring(demosMatcher.start());
+                Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
+            } else {
+                // If no demos section, add at the end
+                String updatedContent = content.trim() + "\n\n## YouTube:\n\n" + youtubeSection + "\n";
+                Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
+            }
+        }
+    }
+
+    private String buildYouTubeSection(List<YouTubeService.YouTubeVideo> videos) {
+        StringBuilder sb = new StringBuilder();
+        for (YouTubeService.YouTubeVideo video : videos) {
+            sb.append(video.toString()).append("\n");
         }
         return sb.toString();
     }

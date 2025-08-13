@@ -14,12 +14,14 @@ public class DocumentCommands {
     private final RssService rssService;
     private final DocumentService documentService;
     private final CalendarService calendarService;
+    private final YouTubeService youTubeService;
 
     @Autowired
-    public DocumentCommands(RssService rssService, DocumentService documentService, CalendarService calendarService) {
+    public DocumentCommands(RssService rssService, DocumentService documentService, CalendarService calendarService, YouTubeService youTubeService) {
         this.rssService = rssService;
         this.documentService = documentService;
         this.calendarService = calendarService;
+        this.youTubeService = youTubeService;
     }
 
     @ShellMethod(value = "Create a new document with template", key = "create")
@@ -80,6 +82,34 @@ public class DocumentCommands {
             return "Updated demo section";
         } catch (IOException e) {
             return "Error updating demo: " + e.getMessage();
+        }
+    }
+
+    @ShellMethod(value = "Update YouTube section with latest videos", key = "update-youtube")
+    public String updateYouTube(
+            @ShellOption(defaultValue = "spring-update.md") String filename,
+            @ShellOption(defaultValue = "10") int limit) {
+
+        try {
+            List<YouTubeService.YouTubeVideo> videos = youTubeService.fetchLatestVideos(limit);
+            documentService.updateYouTubeSection(filename, videos);
+            return String.format("Updated YouTube section with %d videos", videos.size());
+        } catch (Exception e) {
+            return "Error updating YouTube section: " + e.getMessage();
+        }
+    }
+
+    @ShellMethod(value = "Preview latest YouTube videos (without updating document)", key = "preview-youtube")
+    public String previewYouTube(@ShellOption(defaultValue = "10") int limit) {
+        try {
+            List<YouTubeService.YouTubeVideo> videos = youTubeService.fetchLatestVideos(limit);
+            StringBuilder preview = new StringBuilder("Latest YouTube videos:\n\n");
+            for (YouTubeService.YouTubeVideo video : videos) {
+                preview.append(video.toString()).append("\n");
+            }
+            return preview.toString();
+        } catch (Exception e) {
+            return "Error fetching YouTube videos: " + e.getMessage();
         }
     }
 
@@ -174,14 +204,15 @@ public class DocumentCommands {
         }
     }
 
-    @ShellMethod(value = "Full document update (news + releases + upcoming)", key = "full-update")
+    @ShellMethod(value = "Full document update (news + releases + upcoming + youtube)", key = "full-update")
     public String fullUpdate(
             @ShellOption(defaultValue = "spring-update.md") String filename,
             @ShellOption(defaultValue = "https://spring.io/blog/category/releases.atom") String rssUrl,
             @ShellOption(defaultValue = "https://calendar.spring.io/ical") String calendarUrl,
             @ShellOption(defaultValue = "10") int newsLimit,
             @ShellOption(defaultValue = "7") int daysPast,
-            @ShellOption(defaultValue = "30") int daysAhead) {
+            @ShellOption(defaultValue = "30") int daysAhead,
+            @ShellOption(defaultValue = "10") int youtubeLimit) {
 
         StringBuilder result = new StringBuilder();
 
@@ -209,6 +240,11 @@ public class DocumentCommands {
                 result.append("✓ Updated upcoming releases with default projects\n");
             }
 
+            // Update YouTube section
+            List<YouTubeService.YouTubeVideo> videos = youTubeService.fetchLatestVideos(youtubeLimit);
+            documentService.updateYouTubeSection(filename, videos);
+            result.append("✓ Updated YouTube section with ").append(videos.size()).append(" videos\n");
+
             result.append("\nDocument fully updated: ").append(filename);
             return result.toString();
 
@@ -235,11 +271,15 @@ public class DocumentCommands {
                   preview-calendar [calendarUrl] [daysPast] [daysAhead] - Preview calendar releases
                   add-release [filename] date release       - Manually add an enterprise release
                 
+                YouTube Management:
+                  update-youtube [filename] [limit]         - Update YouTube section with latest videos
+                  preview-youtube [limit]                   - Preview latest YouTube videos
+                
                 Demo Management:
                   update-demo [filename] demo               - Update the demo section
                 
                 Full Update:
-                  full-update [filename] [rssUrl] [calendarUrl] [newsLimit] [daysPast] [daysAhead]
+                  full-update [filename] [rssUrl] [calendarUrl] [newsLimit] [daysPast] [daysAhead] [youtubeLimit]
                                                             - Update everything at once
                 
                 Examples:
@@ -247,7 +287,9 @@ public class DocumentCommands {
                   update-news
                   update-releases my-doc.md https://calendar.spring.io/ical 14
                   update-upcoming my-doc.md https://calendar.spring.io/ical 60
+                  update-youtube my-doc.md 15
                   preview-calendar https://calendar.spring.io/ical 7 30
+                  preview-youtube 5
                   full-update my-doc.md
                   add-release my-doc.md "August 12" "Spring Boot 3.3.3"
                   update-demo my-doc.md "[Spring Security Demo](https://github.com/example/demo)"
