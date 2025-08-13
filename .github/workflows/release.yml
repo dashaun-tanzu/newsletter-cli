@@ -111,9 +111,6 @@ jobs:
           echo "" >> CHANGELOG.md
           echo "## 📦 Available Downloads" >> CHANGELOG.md
           echo "- **Linux (x64)**: \`newsletter-linux-amd64\`" >> CHANGELOG.md
-          echo "- **Windows (x64)**: \`newsletter-windows-amd64.exe\`" >> CHANGELOG.md
-          echo "- **macOS (Intel)**: \`newsletter-macos-amd64\`" >> CHANGELOG.md
-          echo "- **macOS (Apple Silicon)**: \`newsletter-macos-arm64\`" >> CHANGELOG.md
           
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
           cat CHANGELOG.md >> $GITHUB_OUTPUT
