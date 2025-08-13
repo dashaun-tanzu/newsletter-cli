@@ -15,13 +15,15 @@ public class DocumentCommands {
     private final DocumentService documentService;
     private final CalendarService calendarService;
     private final YouTubeService youTubeService;
+    private final GitHubService gitHubService;
 
     @Autowired
-    public DocumentCommands(RssService rssService, DocumentService documentService, CalendarService calendarService, YouTubeService youTubeService) {
+    public DocumentCommands(RssService rssService, DocumentService documentService, CalendarService calendarService, YouTubeService youTubeService, GitHubService gitHubService) {
         this.rssService = rssService;
         this.documentService = documentService;
         this.calendarService = calendarService;
         this.youTubeService = youTubeService;
+        this.gitHubService = gitHubService;
     }
 
     @ShellMethod(value = "Create a new document with template", key = "create")
@@ -82,6 +84,31 @@ public class DocumentCommands {
             return "Updated demo section";
         } catch (IOException e) {
             return "Error updating demo: " + e.getMessage();
+        }
+    }
+
+    @ShellMethod(value = "Update demos section with GitHub repositories ending in '-demo'", key = "update-github-demos")
+    public String updateGitHubDemos(@ShellOption(defaultValue = "spring-update.md") String filename) {
+        try {
+            List<GitHubService.DemoRepository> demoRepos = gitHubService.fetchDemoRepositories();
+            documentService.updateGitHubDemos(filename, demoRepos);
+            return String.format("Updated demos section with %d GitHub repositories", demoRepos.size());
+        } catch (Exception e) {
+            return "Error updating GitHub demos: " + e.getMessage();
+        }
+    }
+
+    @ShellMethod(value = "Preview GitHub demo repositories", key = "preview-github-demos")
+    public String previewGitHubDemos() {
+        try {
+            List<GitHubService.DemoRepository> demoRepos = gitHubService.fetchDemoRepositories();
+            StringBuilder preview = new StringBuilder("GitHub demo repositories:\n\n");
+            for (GitHubService.DemoRepository repo : demoRepos) {
+                preview.append(repo.toString()).append("\n");
+            }
+            return preview.toString();
+        } catch (Exception e) {
+            return "Error fetching GitHub demos: " + e.getMessage();
         }
     }
 
@@ -245,6 +272,11 @@ public class DocumentCommands {
             documentService.updateYouTubeSection(filename, videos);
             result.append("✓ Updated YouTube section with ").append(videos.size()).append(" videos\n");
 
+            // Update GitHub demos
+            List<GitHubService.DemoRepository> demoRepos = gitHubService.fetchDemoRepositories();
+            documentService.updateGitHubDemos(filename, demoRepos);
+            result.append("✓ Updated demos section with ").append(demoRepos.size()).append(" GitHub repositories\n");
+
             result.append("\nDocument fully updated: ").append(filename);
             return result.toString();
 
@@ -276,11 +308,13 @@ public class DocumentCommands {
                   preview-youtube [limit]                   - Preview latest YouTube videos
                 
                 Demo Management:
-                  update-demo [filename] demo               - Update the demo section
+                  update-demo [filename] demo               - Update the demo section manually
+                  update-github-demos [filename]           - Update demos with GitHub repositories ending in '-demo'
+                  preview-github-demos                      - Preview GitHub demo repositories
                 
                 Full Update:
                   full-update [filename] [rssUrl] [calendarUrl] [newsLimit] [daysPast] [daysAhead] [youtubeLimit]
-                                                            - Update everything at once
+                                                            - Update everything at once (includes GitHub demos)
                 
                 Examples:
                   create my-doc.md

@@ -277,4 +277,34 @@ public class DocumentService {
             Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
         }
     }
+
+    public void updateGitHubDemos(String filename, List<GitHubService.DemoRepository> demoRepos) throws IOException {
+        Path path = Path.of(filename != null ? filename : DEFAULT_FILENAME);
+
+        if (!Files.exists(path)) {
+            createNewDocument(filename);
+        }
+
+        String content = Files.readString(path);
+        Pattern pattern = Pattern.compile("(## Demos:\\s*\\n)(.*?)$", Pattern.DOTALL);
+        Matcher matcher = pattern.matcher(content);
+
+        StringBuilder demosSection = new StringBuilder();
+        if (!demoRepos.isEmpty()) {
+            demosSection.append("\n");
+            for (GitHubService.DemoRepository repo : demoRepos) {
+                demosSection.append(repo.toString()).append("\n");
+            }
+            demosSection.append("\n");
+        } else {
+            demosSection.append("\nNo demo repositories found.\n\n");
+        }
+
+        if (matcher.find()) {
+            String updatedContent = content.substring(0, matcher.start(2)) +
+                    demosSection +
+                    content.substring(matcher.end());
+            Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
+        }
+    }
 }

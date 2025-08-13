@@ -55,7 +55,6 @@ public class YouTubeService {
         try {
             // All channels now use channel IDs
             String rssUrl = "https://www.youtube.com/feeds/videos.xml?channel_id=" + channel.getChannelId();
-            System.out.println(rssUrl);
             String rssContent = webClient.get()
                     .uri(rssUrl)
                     .retrieve()
