@@ -22,11 +22,6 @@ jobs:
             arch: amd64
             artifact_name: newsletter.exe
             asset_name: newsletter-windows-amd64.exe
-          - os: macos-latest  # Apple Silicon Mac
-            platform: macos
-            arch: arm64
-            artifact_name: newsletter
-            asset_name: newsletter-macos-arm64
 
     runs-on: ${{ matrix.os }}
 
