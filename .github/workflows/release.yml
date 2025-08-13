@@ -1,0 +1,156 @@
+# .github/workflows/release.yml
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on version tags like v1.0.0, v2.1.3, etc.
+
+jobs:
+  build:
+    name: Build Native Binary
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: amd64
+            artifact_name: newsletter
+            asset_name: newsletter-linux-amd64
+          - os: windows-latest
+            platform: windows
+            arch: amd64
+            artifact_name: newsletter.exe
+            asset_name: newsletter-windows-amd64.exe
+          - os: macos-latest
+            platform: macos
+            arch: amd64
+            artifact_name: newsletter
+            asset_name: newsletter-macos-amd64
+          - os: macos-13  # Intel Mac for x86_64
+            platform: macos
+            arch: amd64
+            artifact_name: newsletter
+            asset_name: newsletter-macos-amd64
+          - os: macos-latest  # Apple Silicon Mac
+            platform: macos
+            arch: arm64
+            artifact_name: newsletter
+            asset_name: newsletter-macos-arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '21'  # or '17' depending on your project
+          distribution: 'graalvm-community'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          native-image-job-reports: 'true'
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      - name: Run tests
+        run: ./mvnw test
+
+      - name: Build native image (Maven)
+        run: ./mvnw -Pnative native:compile -DskipTests
+
+      - name: Rename binary
+        run: |
+          if [[ "${{ matrix.os }}" == windows-* ]]; then
+            if [[ -f "target/newsletter.exe" ]]; then
+              mv "target/newsletter.exe" "${{ matrix.asset_name }}"
+            elif [[ -f "target/newsletter" ]]; then
+              mv "target/newsletter" "${{ matrix.asset_name }}"
+            fi
+          else
+            if [[ -f "target/newsletter" ]]; then
+              mv "target/newsletter" "${{ matrix.asset_name }}"
+            fi
+          fi
+
+      - name: Make binary executable (Unix)
+        if: matrix.os != 'windows-latest'
+        run: chmod +x "${{ matrix.asset_name }}"
+
+      - name: Test binary
+        run: |
+          if [[ "${{ matrix.os }}" == windows-* ]]; then
+            ./${{ matrix.asset_name }} --version || echo "Version check not available"
+          else
+            ./${{ matrix.asset_name }} --version || echo "Version check not available"
+          fi
+
+      - name: Upload binary as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: List downloaded artifacts
+        run: find . -name "newsletter-*" -type f -exec ls -la {} \;
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [[ -n "$PREV_TAG" ]]; then
+            echo "## 🚀 Changes since $PREV_TAG" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            git log $PREV_TAG..HEAD --pretty=format:"- %s (%an)" --no-merges >> CHANGELOG.md
+          else
+            echo "## 🎉 Initial Release" > CHANGELOG.md
+            echo "" >> CHANGELOG.md
+            echo "This is the first release of the application." >> CHANGELOG.md
+          fi
+          
+          echo "" >> CHANGELOG.md
+          echo "## 📦 Available Downloads" >> CHANGELOG.md
+          echo "- **Linux (x64)**: \`newsletter-linux-amd64\`" >> CHANGELOG.md
+          echo "- **Windows (x64)**: \`newsletter-windows-amd64.exe\`" >> CHANGELOG.md
+          echo "- **macOS (Intel)**: \`newsletter-macos-amd64\`" >> CHANGELOG.md
+          echo "- **macOS (Apple Silicon)**: \`newsletter-macos-arm64\`" >> CHANGELOG.md
+          
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat CHANGELOG.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Release ${{ github.ref_name }}"
+          body: ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}  # Mark as prerelease if tag contains '-' (e.g., v1.0.0-beta)
+          files: |
+            */newsletter-*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
