@@ -20,11 +20,11 @@ public class YouTubeService {
 
     private final WebClient webClient;
     
-    // Channel URLs mapped to their RSS feed URLs
+    // Channel URLs mapped to their RSS feed URLs  
     private static final List<ChannelInfo> CHANNELS = List.of(
-        new ChannelInfo("Coffee + Software", "@coffeesoftware", true),
-        new ChannelInfo("SpringSourceDev", "UC7yfnfvEUlXUIfm8rGLwZdA", false), 
-        new ChannelInfo("Dan Vega", "@danvega", true)
+        new ChannelInfo("Coffee + Software", "UCjcceQmjS4DKBW_J_1UANow"),
+        new ChannelInfo("SpringSourceDev", "UC7yfnfvEUlXUIfm8rGLwZdA"), 
+        new ChannelInfo("Dan Vega", "UCc98QQw1D-y38wg6mO3w4MQ")
     );
 
     public YouTubeService() {
@@ -53,15 +53,9 @@ public class YouTubeService {
 
     private List<YouTubeVideo> fetchVideosFromChannel(ChannelInfo channel, int limit) {
         try {
-            String rssUrl;
-            if (channel.isUsername()) {
-                // For username handles like @coffeesoftware, @danvega
-                rssUrl = "https://www.youtube.com/feeds/videos.xml?user=" + channel.getChannelId().substring(1);
-            } else {
-                // For channel IDs like UC7yfnfvEUlXUIfm8rGLwZdA
-                rssUrl = "https://www.youtube.com/feeds/videos.xml?channel_id=" + channel.getChannelId();
-            }
-            
+            // All channels now use channel IDs
+            String rssUrl = "https://www.youtube.com/feeds/videos.xml?channel_id=" + channel.getChannelId();
+            System.out.println(rssUrl);
             String rssContent = webClient.get()
                     .uri(rssUrl)
                     .retrieve()
@@ -138,16 +132,13 @@ public class YouTubeService {
     private static class ChannelInfo {
         private final String name;
         private final String channelId;
-        private final boolean isUsername;
 
-        public ChannelInfo(String name, String channelId, boolean isUsername) {
+        public ChannelInfo(String name, String channelId) {
             this.name = name;
             this.channelId = channelId;
-            this.isUsername = isUsername;
         }
 
         public String getName() { return name; }
         public String getChannelId() { return channelId; }
-        public boolean isUsername() { return isUsername; }
     }
 }
