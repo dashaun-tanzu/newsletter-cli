@@ -13,11 +13,13 @@ public class DocumentCommands {
 
     private final RssService rssService;
     private final DocumentService documentService;
+    private final CalendarService calendarService;
 
     @Autowired
-    public DocumentCommands(RssService rssService, DocumentService documentService) {
+    public DocumentCommands(RssService rssService, DocumentService documentService, CalendarService calendarService) {
         this.rssService = rssService;
         this.documentService = documentService;
+        this.calendarService = calendarService;
     }
 
     @ShellMethod(value = "Create a new document with template", key = "create")
@@ -98,25 +100,157 @@ public class DocumentCommands {
         }
     }
 
+    @ShellMethod(value = "Update releases from Spring calendar", key = "update-releases")
+    public String updateReleasesFromCalendar(
+            @ShellOption(defaultValue = "spring-update.md") String filename,
+            @ShellOption(defaultValue = "https://calendar.spring.io/ical") String calendarUrl,
+            @ShellOption(defaultValue = "7") int daysPast) {
+
+        try {
+            List<CalendarService.ReleaseEvent> recentReleases = calendarService.fetchRecentReleases(calendarUrl, daysPast);
+
+            if (recentReleases.isEmpty()) {
+                return "No recent releases found in calendar for the past " + daysPast + " days";
+            }
+
+            documentService.addMultipleEnterpriseReleases(filename, recentReleases);
+            return String.format("Added %d releases from calendar (past %d days)", recentReleases.size(), daysPast);
+        } catch (Exception e) {
+            return "Error updating releases from calendar: " + e.getMessage();
+        }
+    }
+
+    @ShellMethod(value = "Update upcoming releases section", key = "update-upcoming")
+    public String updateUpcomingReleases(
+            @ShellOption(defaultValue = "spring-update.md") String filename,
+            @ShellOption(defaultValue = "https://calendar.spring.io/ical") String calendarUrl,
+            @ShellOption(defaultValue = "30") int daysAhead) {
+
+        try {
+            List<CalendarService.ReleaseEvent> upcomingReleases = calendarService.fetchUpcomingReleases(calendarUrl, daysAhead);
+            documentService.updateReleasesComingSoon(filename, upcomingReleases);
+
+            if (upcomingReleases.isEmpty()) {
+                return "Updated 'Releases coming soon' section with default projects (no calendar events found)";
+            } else {
+                return String.format("Updated 'Releases coming soon' section with %d upcoming releases", upcomingReleases.size());
+            }
+        } catch (Exception e) {
+            return "Error updating upcoming releases: " + e.getMessage();
+        }
+    }
+
+    @ShellMethod(value = "Preview calendar releases without updating", key = "preview-calendar")
+    public String previewCalendarReleases(
+            @ShellOption(defaultValue = "https://calendar.spring.io/ical") String calendarUrl,
+            @ShellOption(defaultValue = "7") int daysPast,
+            @ShellOption(defaultValue = "30") int daysAhead) {
+
+        try {
+            List<CalendarService.ReleaseEvent> recentReleases = calendarService.fetchRecentReleases(calendarUrl, daysPast);
+            List<CalendarService.ReleaseEvent> upcomingReleases = calendarService.fetchUpcomingReleases(calendarUrl, daysAhead);
+
+            StringBuilder preview = new StringBuilder();
+
+            preview.append("Recent Releases (past ").append(daysPast).append(" days):\n");
+            if (recentReleases.isEmpty()) {
+                preview.append("  No recent releases found\n");
+            } else {
+                recentReleases.forEach(release ->
+                        preview.append("  ").append(release.toString()).append("\n"));
+            }
+
+            preview.append("\nUpcoming Releases (next ").append(daysAhead).append(" days):\n");
+            if (upcomingReleases.isEmpty()) {
+                preview.append("  No upcoming releases found\n");
+            } else {
+                upcomingReleases.forEach(release ->
+                        preview.append("  ").append(release.toString()).append("\n"));
+            }
+
+            return preview.toString();
+        } catch (Exception e) {
+            return "Error fetching calendar releases: " + e.getMessage();
+        }
+    }
+
+    @ShellMethod(value = "Full document update (news + releases + upcoming)", key = "full-update")
+    public String fullUpdate(
+            @ShellOption(defaultValue = "spring-update.md") String filename,
+            @ShellOption(defaultValue = "https://spring.io/blog/category/releases.atom") String rssUrl,
+            @ShellOption(defaultValue = "https://calendar.spring.io/ical") String calendarUrl,
+            @ShellOption(defaultValue = "10") int newsLimit,
+            @ShellOption(defaultValue = "7") int daysPast,
+            @ShellOption(defaultValue = "30") int daysAhead) {
+
+        StringBuilder result = new StringBuilder();
+
+        try {
+            // Update news
+            List<RssService.NewsItem> newsItems = rssService.fetchLatestNews(rssUrl, newsLimit);
+            documentService.updateNewsSection(filename, newsItems);
+            result.append("✓ Updated news section with ").append(newsItems.size()).append(" items\n");
+
+            // Update recent releases
+            List<CalendarService.ReleaseEvent> recentReleases = calendarService.fetchRecentReleases(calendarUrl, daysPast);
+            if (!recentReleases.isEmpty()) {
+                documentService.addMultipleEnterpriseReleases(filename, recentReleases);
+                result.append("✓ Added ").append(recentReleases.size()).append(" recent releases\n");
+            } else {
+                result.append("- No recent releases found\n");
+            }
+
+            // Update upcoming releases
+            List<CalendarService.ReleaseEvent> upcomingReleases = calendarService.fetchUpcomingReleases(calendarUrl, daysAhead);
+            documentService.updateReleasesComingSoon(filename, upcomingReleases);
+            if (!upcomingReleases.isEmpty()) {
+                result.append("✓ Updated upcoming releases with ").append(upcomingReleases.size()).append(" items\n");
+            } else {
+                result.append("✓ Updated upcoming releases with default projects\n");
+            }
+
+            result.append("\nDocument fully updated: ").append(filename);
+            return result.toString();
+
+        } catch (Exception e) {
+            return "Error during full update: " + e.getMessage();
+        }
+    }
     @ShellMethod(value = "Show help for document management", key = "help-doc")
     public String showHelp() {
         return """
                 Document Updater Commands:
                 
-                create [filename]                    - Create a new document with template
-                update-news [filename] [rssUrl] [limit] - Update news section from RSS feed
-                show [filename]                      - Show current document content
-                add-release [filename] date release  - Add an enterprise release
-                update-demo [filename] demo          - Update the demo section
-                preview-news [rssUrl] [limit]        - Preview latest news from RSS
+                Document Management:
+                  create [filename]                         - Create a new document with template
+                  show [filename]                           - Show current document content
+                
+                News Management:
+                  update-news [filename] [rssUrl] [limit]   - Update news section from RSS feed
+                  preview-news [rssUrl] [limit]             - Preview latest news from RSS
+                
+                Release Management:
+                  update-releases [filename] [calendarUrl] [daysPast] - Update releases from Spring calendar
+                  update-upcoming [filename] [calendarUrl] [daysAhead] - Update upcoming releases section
+                  preview-calendar [calendarUrl] [daysPast] [daysAhead] - Preview calendar releases
+                  add-release [filename] date release       - Manually add an enterprise release
+                
+                Demo Management:
+                  update-demo [filename] demo               - Update the demo section
+                
+                Full Update:
+                  full-update [filename] [rssUrl] [calendarUrl] [newsLimit] [daysPast] [daysAhead]
+                                                            - Update everything at once
                 
                 Examples:
                   create my-doc.md
                   update-news
-                  update-news my-doc.md https://spring.io/blog/category/releases.atom 15
-                  add-release my-doc.md "July 25" "Spring Boot 3.3.2"
+                  update-releases my-doc.md https://calendar.spring.io/ical 14
+                  update-upcoming my-doc.md https://calendar.spring.io/ical 60
+                  preview-calendar https://calendar.spring.io/ical 7 30
+                  full-update my-doc.md
+                  add-release my-doc.md "August 12" "Spring Boot 3.3.3"
                   update-demo my-doc.md "[Spring Security Demo](https://github.com/example/demo)"
-                  preview-news https://spring.io/blog/category/releases.atom 3
                 """;
     }
 }
