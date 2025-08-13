@@ -1,23 +1,22 @@
-# Spring Document Updater CLI
+# Newsletter CLI
 
-A Spring Shell-based CLI application that helps you maintain and update Spring-related documents by automatically fetching the latest news from RSS feeds and managing document sections.
+A Spring Shell-based CLI application for generating and managing newsletter documents. Automatically fetches content from multiple sources including RSS feeds, Spring release calendar, YouTube channels, and GitHub repositories.
 
 ## Features
 
-- 📰 Fetch latest Spring release blogs from RSS feeds
-- 📅 **Automatically integrate Spring release calendar events**
-- 📝 Generate document templates with proper sections
-- 🔄 Update news sections automatically
-- 📋 Manage enterprise releases from calendar
-- ⏰ Track upcoming releases with dates
-- 🎯 Update demo sections
-- 👀 Preview content before updating
-- 💾 Configurable file names and sources
-- ⚡ Full document updates with one command
+- 📰 **RSS/Atom Feed Integration** - Fetch latest Spring release blogs and news
+- 📅 **Spring Release Calendar** - Automatically integrate recent and upcoming releases  
+- 🎥 **YouTube Integration** - Pull latest videos from Spring channels
+- 🚀 **GitHub Demo Discovery** - Automatically find repositories ending in '-demo'
+- 📝 **Document Templates** - Generate structured markdown documents
+- 👀 **Preview Mode** - Preview content before updating documents
+- 💾 **Flexible Configuration** - Configurable file names, URLs, and limits
+- ⚡ **Batch Updates** - Full document updates with one command
+- 🧹 **Smart Formatting** - Automatic spacing cleanup and consistent formatting
 
 ## Prerequisites
 
-- Java 17 or later
+- Java 24 or later
 - Maven 3.6 or later
 
 ## Building the Application
@@ -29,7 +28,7 @@ mvn clean package
 ## Running the Application
 
 ```bash
-java -jar target/spring-doc-updater-1.0.0.jar
+java -jar target/newsletter-0.0.1-SNAPSHOT.jar
 ```
 
 Or during development:
@@ -74,7 +73,16 @@ mvn spring-boot:run
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `update-demo` | Update the demo section | `update-demo my-doc.md "[Spring Cloud Demo](https://github.com/example/demo)"` |
+| `update-demo` | Update the demo section manually | `update-demo my-doc.md "[Spring Cloud Demo](https://github.com/example/demo)"` |
+| `update-github-demos` | Auto-update with GitHub '-demo' repos | `update-github-demos my-doc.md` |
+| `preview-github-demos` | Preview available demo repositories | `preview-github-demos` |
+
+### YouTube Management
+
+| Command | Description | Example |
+|---------|-------------|---------|
+| `update-youtube` | Update YouTube section with latest videos | `update-youtube my-doc.md 10` |
+| `preview-youtube` | Preview latest YouTube videos | `preview-youtube 5` |
 
 ## Usage Examples
 
@@ -82,7 +90,7 @@ mvn spring-boot:run
 
 1. Start the CLI:
    ```bash
-   java -jar target/spring-doc-updater-1.0.0.jar
+   java -jar target/newsletter-0.0.1-SNAPSHOT.jar
    ```
 
 2. Create a new document:
@@ -124,19 +132,18 @@ mvn spring-boot:run
 
 ### Advanced Usage
 
-Preview news before updating:
+Preview content before updating:
 ```
 shell:>preview-news https://spring.io/blog/category/releases.atom 5
+shell:>preview-youtube 10
+shell:>preview-github-demos
+shell:>preview-calendar https://calendar.spring.io/ical 7 30
 ```
 
-Add enterprise releases:
+Update specific sections:
 ```
-shell:>add-release weekly-update.md "August 5" "Spring Framework 6.2.1"
-shell:>add-release weekly-update.md "August 5" "Spring Security 6.4.2"
-```
-
-Update demo section:
-```
+shell:>update-youtube weekly-update.md 15
+shell:>update-github-demos weekly-update.md
 shell:>update-demo weekly-update.md "[Spring AI Demo](https://github.com/spring-projects/spring-ai-examples)"
 ```
 
@@ -156,34 +163,30 @@ The application generates documents with the following structure:
 ```markdown
 # [Current Date]
 
-News:
+## News:
 - [Fetched from RSS feed]
 
-Enterprise Releases:
-- [Manually added releases]
+## Recent Enterprise Releases:
+- [Calendar-based releases grouped by date]
 
-Releases coming soon:
-- Micrometer
-- Micrometer Tracing
-- Reactor
-- Reactor Core
-- Reactor Netty
-- Reactor Pool
-- Spring Framework
-- Spring LDAP
-- Spring Data
+## Releases coming soon:
+- [Upcoming calendar events or default list]
 
-Demo:
-[Demo links and descriptions]
+## YouTube:
+- [Latest videos from Spring channels]
+
+## Demos:
+- [GitHub demo repositories]
 ```
 
 ## Configuration
 
 The application can be configured via `application.properties`:
 
-- Timeout settings for web requests
-- Logging levels
-- Default RSS feed URLs
+- **Interactive/Non-interactive modes**: `spring.shell.interactive.enabled=true`
+- **Web request timeouts**: `spring.webflux.timeout.connect=10s`, `spring.webflux.timeout.read=30s`
+- **Logging levels**: `logging.level.root=OFF` for clean CLI output
+- **Application settings**: Banner mode, web application type disabled for CLI
 
 ## Error Handling
 
