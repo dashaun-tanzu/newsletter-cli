@@ -17,11 +17,6 @@ jobs:
             arch: amd64
             artifact_name: newsletter
             asset_name: newsletter-linux-amd64
-          - os: windows-latest
-            platform: windows
-            arch: amd64
-            artifact_name: newsletter.exe
-            asset_name: newsletter-windows-amd64.exe
 
     runs-on: ${{ matrix.os }}
 
