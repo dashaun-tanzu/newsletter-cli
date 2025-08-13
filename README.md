@@ -16,7 +16,7 @@ A Spring Shell-based CLI application for generating and managing newsletter docu
 
 ## Prerequisites
 
-- Java 24 or later
+- Java 21 or later
 - Maven 3.6 or later
 
 ## Building the Application
