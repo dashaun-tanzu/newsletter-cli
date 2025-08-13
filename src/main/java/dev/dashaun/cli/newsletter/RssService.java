@@ -9,10 +9,10 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 public class RssService {
@@ -20,22 +20,20 @@ public class RssService {
     private final WebClient webClient;
 
     public RssService() {
-        this.webClient = WebClient.builder().build();
+        this.webClient = WebClient.builder()
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(1024 * 1024))
+                .build();
     }
 
-    public SyndFeed parseRssContent(String xmlContent) {
+    private SyndFeed parseRssContent(String xmlContent) {
         try {
-            // For Rome's XmlReader, we need to convert to an InputStream first
             ByteArrayInputStream inputStream = new ByteArrayInputStream(
                     xmlContent.getBytes(StandardCharsets.UTF_8));
-
-            // Now we can use Rome's XmlReader
             XmlReader xmlReader = new XmlReader(inputStream);
             SyndFeedInput input = new SyndFeedInput();
             return input.build(xmlReader);
         } catch (Exception e) {
-            // Handle exceptions
-            return null;
+            throw new RuntimeException("Failed to parse RSS content: " + e.getMessage(), e);
         }
     }
 
@@ -45,15 +43,16 @@ public class RssService {
                     .uri(rssUrl)
                     .retrieve()
                     .bodyToMono(String.class)
+                    .timeout(Duration.ofSeconds(30))
                     .block();
 
             SyndFeed feed = parseRssContent(rssContent);
-
+            
             return feed.getEntries().stream()
                     .limit(limit)
                     .map(this::convertToNewsItem)
-                    .collect(Collectors.toList());
-
+                    .toList();
+                    
         } catch (Exception e) {
             throw new RuntimeException("Failed to fetch RSS feed: " + e.getMessage(), e);
         }
@@ -74,21 +73,7 @@ public class RssService {
         );
     }
 
-    public static class NewsItem {
-        private final String title;
-        private final String link;
-        private final LocalDateTime publishedDate;
-
-        public NewsItem(String title, String link, LocalDateTime publishedDate) {
-            this.title = title;
-            this.link = link;
-            this.publishedDate = publishedDate;
-        }
-
-        public String getTitle() { return title; }
-        public String getLink() { return link; }
-        public LocalDateTime getPublishedDate() { return publishedDate; }
-
+    public record NewsItem(String title, String link, LocalDateTime publishedDate) {
         @Override
         public String toString() {
             return String.format("- [%s](%s)", title, link);

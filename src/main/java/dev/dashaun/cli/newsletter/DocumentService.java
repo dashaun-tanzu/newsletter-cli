@@ -24,6 +24,13 @@ public class DocumentService {
             "(## YouTube:\\s*\\n)(.*?)(\\n\\n|\\n(?=##)|$)",
             Pattern.DOTALL
     );
+    private static final Pattern ENTERPRISE_RELEASES_SECTION_PATTERN = Pattern.compile(
+            "(## Recent Enterprise Releases:\\s*\\n)(.*?)(\\n\\n|\\n(?=##)|$)",
+            Pattern.DOTALL);
+    private static final Pattern RELEASES_COMING_SOON_SECTION_PATTERN = Pattern.compile(
+            "(## Releases coming soon:\\s*\\n)(.*?)(\\n\\n|\\n(?=##)|$)",
+            Pattern.DOTALL);
+
 
     public void createNewDocument(String filename) throws IOException {
         Path path = Path.of(filename != null ? filename : DEFAULT_FILENAME);
@@ -137,42 +144,6 @@ public class DocumentService {
         return Files.readString(path);
     }
 
-    public void addEnterpriseRelease(String filename, String date, String release) throws IOException {
-        Path path = Path.of(filename != null ? filename : DEFAULT_FILENAME);
-
-        if (!Files.exists(path)) {
-            createNewDocument(filename);
-        }
-
-        String content = Files.readString(path);
-        Pattern pattern = Pattern.compile("(## Recent Enterprise Releases:\\s*\\n)(.*?)(\\n\\n|\\n(?=##)|$)", Pattern.DOTALL);
-        Matcher matcher = pattern.matcher(content);
-
-        String newRelease = String.format("- %s\n  - %s\n", date, release);
-
-        if (matcher.find()) {
-            // Section exists, update it
-            String existingReleases = matcher.group(2);
-            String updatedReleases = newRelease + existingReleases;
-
-            String updatedContent = content.substring(0, matcher.start(2)) +
-                    updatedReleases +
-                    content.substring(matcher.end(2));
-            Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
-        } else {
-            // Section doesn't exist, create it after the News section
-            Pattern newsPattern = Pattern.compile("(## News:\\s*\\n.*?)(\\n\\n|\\n(?=##)|$)", Pattern.DOTALL);
-            Matcher newsMatcher = newsPattern.matcher(content);
-            
-            if (newsMatcher.find()) {
-                String updatedContent = content.substring(0, newsMatcher.end()) +
-                        "\n## Recent Enterprise Releases:\n\n" + newRelease +
-                        content.substring(newsMatcher.end());
-                Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
-            }
-        }
-    }
-
     public void addMultipleEnterpriseReleases(String filename, List<CalendarService.ReleaseEvent> releases) throws IOException {
         Path path = Path.of(filename != null ? filename : DEFAULT_FILENAME);
 
@@ -181,8 +152,7 @@ public class DocumentService {
         }
 
         String content = Files.readString(path);
-        Pattern pattern = Pattern.compile("(## Recent Enterprise Releases:\\s*\\n)(.*?)(\\n\\n|\\n(?=##)|$)", Pattern.DOTALL);
-        Matcher matcher = pattern.matcher(content);
+        Matcher matcher = ENTERPRISE_RELEASES_SECTION_PATTERN.matcher(content);
 
         StringBuilder newReleases = new StringBuilder();
         // Group releases by date
@@ -206,8 +176,7 @@ public class DocumentService {
             Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
         } else {
             // Section doesn't exist, create it after the News section
-            Pattern newsPattern = Pattern.compile("(## News:\\s*\\n.*?)(\\n\\n|\\n(?=##)|$)", Pattern.DOTALL);
-            Matcher newsMatcher = newsPattern.matcher(content);
+            Matcher newsMatcher = NEWS_SECTION_PATTERN.matcher(content);
             
             if (newsMatcher.find()) {
                 String updatedContent = content.substring(0, newsMatcher.end()) +
@@ -226,8 +195,7 @@ public class DocumentService {
         }
 
         String content = Files.readString(path);
-        Pattern pattern = Pattern.compile("(## Releases coming soon:\\s*\\n)(.*?)(\\n\\n|\\n(?=##)|$)", Pattern.DOTALL);
-        Matcher matcher = pattern.matcher(content);
+        Matcher matcher = RELEASES_COMING_SOON_SECTION_PATTERN.matcher(content);
 
         if (matcher.find()) {
             StringBuilder upcomingSection = new StringBuilder();
@@ -239,19 +207,6 @@ public class DocumentService {
                             .append(" (")
                             .append(release.getReleaseDate().format(java.time.format.DateTimeFormatter.ofPattern("MMM d")))
                             .append(")\n"));
-
-            // Add default items if no calendar releases found
-            if (upcomingReleases.isEmpty()) {
-                upcomingSection.append("- Micrometer\n")
-                        .append("- Micrometer Tracing\n")
-                        .append("- Reactor\n")
-                        .append("- Reactor Core\n")
-                        .append("- Reactor Netty\n")
-                        .append("- Reactor Pool\n")
-                        .append("- Spring Framework\n")
-                        .append("- Spring LDAP\n")
-                        .append("- Spring Data\n");
-            }
 
             String updatedContent = content.substring(0, matcher.start(2)) +
                     upcomingSection +
@@ -304,7 +259,17 @@ public class DocumentService {
             String updatedContent = content.substring(0, matcher.start(2)) +
                     demosSection +
                     content.substring(matcher.end());
-            Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
+            writeDocumentWithCleanup(path, updatedContent);
         }
+    }
+
+    private String removeDoubleSpacing(String content) {
+        // Replace multiple consecutive blank lines with single blank lines
+        return content.replaceAll("\\n\\n\\n+", "\n\n");
+    }
+
+    private void writeDocumentWithCleanup(Path path, String content) throws IOException {
+        String cleanedContent = removeDoubleSpacing(content);
+        Files.writeString(path, cleanedContent, StandardOpenOption.TRUNCATE_EXISTING);
     }
 }

@@ -60,20 +60,6 @@ public class DocumentCommands {
         }
     }
 
-    @ShellMethod(value = "Add an enterprise release", key = "add-release")
-    public String addEnterpriseRelease(
-            @ShellOption(defaultValue = "spring-update.md") String filename,
-            String date,
-            String release) {
-
-        try {
-            documentService.addEnterpriseRelease(filename, date, release);
-            return "Added enterprise release: " + release + " on " + date;
-        } catch (IOException e) {
-            return "Error adding release: " + e.getMessage();
-        }
-    }
-
     @ShellMethod(value = "Update the demo section", key = "update-demo")
     public String updateDemo(
             @ShellOption(defaultValue = "spring-update.md") String filename,
@@ -281,6 +267,7 @@ public class DocumentCommands {
             return result.toString();
 
         } catch (Exception e) {
+            System.out.println(e.getMessage());
             return "Error during full update: " + e.getMessage();
         }
     }
