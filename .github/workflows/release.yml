@@ -22,11 +22,6 @@ jobs:
             arch: amd64
             artifact_name: newsletter.exe
             asset_name: newsletter-windows-amd64.exe
-          - os: macos-latest
-            platform: macos
-            arch: amd64
-            artifact_name: newsletter
-            asset_name: newsletter-macos-amd64
           - os: macos-13  # Intel Mac for x86_64
             platform: macos
             arch: amd64
