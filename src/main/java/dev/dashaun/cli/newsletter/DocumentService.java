@@ -155,10 +155,12 @@ public class DocumentService {
         Matcher matcher = ENTERPRISE_RELEASES_SECTION_PATTERN.matcher(content);
 
         StringBuilder newReleases = new StringBuilder();
-        // Group releases by date
+        // Group releases by date, maintaining chronological order
         releases.stream()
                 .collect(java.util.stream.Collectors.groupingBy(
-                        r -> r.getReleaseDate().format(java.time.format.DateTimeFormatter.ofPattern("MMMM d"))))
+                        r -> r.getReleaseDate().format(java.time.format.DateTimeFormatter.ofPattern("MMMM d")),
+                        java.util.LinkedHashMap::new,
+                        java.util.stream.Collectors.toList()))
                 .forEach((date, releaseList) -> {
                     newReleases.append("- ").append(date).append("\n");
                     releaseList.forEach(release ->

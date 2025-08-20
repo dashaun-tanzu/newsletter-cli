@@ -93,7 +93,7 @@ public class CalendarService {
             }
 
             return releases.stream()
-                    .sorted((a, b) -> b.getReleaseDate().compareTo(a.getReleaseDate())) // Most recent first
+                    .sorted((a, b) -> a.getReleaseDate().compareTo(b.getReleaseDate())) // Oldest first
                     .collect(Collectors.toList());
 
         } catch (Exception e) {
