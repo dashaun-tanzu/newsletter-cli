@@ -125,7 +125,7 @@ public class CalendarService {
                 return null;
             }
 
-            if(!isEnterpriseReleaseEvent(eventSummary)){
+            if(isEnterpriseReleaseEvent(eventSummary)){
                 return null;
             }
 
