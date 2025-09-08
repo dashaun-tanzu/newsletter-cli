@@ -50,9 +50,11 @@ public class CalendarService {
             for (Object component : calendar.getComponents()) {
                 if (component instanceof VEvent) {
                     VEvent event = (VEvent) component;
+                    if(!isEnterpriseReleaseEvent(event.getSummary().getValue())) {
                     ReleaseEvent release = parseReleaseEvent(event, today, endDate);
                     if (release != null) {
                         releases.add(release);
+                    }
                     }
                 }
             }
@@ -85,9 +87,11 @@ public class CalendarService {
             for (Object component : calendar.getComponents()) {
                 if (component instanceof VEvent) {
                     VEvent event = (VEvent) component;
-                    ReleaseEvent release = parseReleaseEvent(event, startDate, today);
-                    if (release != null) {
-                        releases.add(release);
+                    if(isEnterpriseReleaseEvent(event.getSummary().getValue())) {
+                        ReleaseEvent release = parseReleaseEvent(event, startDate, today);
+                        if (release != null) {
+                            releases.add(release);
+                        }
                     }
                 }
             }
@@ -122,10 +126,6 @@ public class CalendarService {
 
             // Skip events that don't look like releases
             if (!isReleaseEvent(eventSummary)) {
-                return null;
-            }
-
-            if(isEnterpriseReleaseEvent(eventSummary)){
                 return null;
             }
 
@@ -215,7 +215,7 @@ public class CalendarService {
         public String getOriginalSummary() { return originalSummary; }
 
         public String getFormattedRelease() {
-            return String.format("%s %s", projectName, version);
+            return String.format("%s", originalSummary);
         }
 
         @Override
