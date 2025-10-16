@@ -10,7 +10,7 @@
   </parent>
   <groupId>dev.dashaun.cli</groupId>
   <artifactId>newsletter</artifactId>
-  <version>0.0.1-SNAPSHOT</version>
+  <version>0</version>
   <name>${project.groupId}.${project.artifactId}</name>
   <url></url>
   <licenses>
