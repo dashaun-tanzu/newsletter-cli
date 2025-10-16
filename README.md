@@ -11,7 +11,7 @@ A Spring Shell-based CLI application for generating and managing newsletter docu
 - 📝 **Document Templates** - Generate structured markdown documents
 - 👀 **Preview Mode** - Preview content before updating documents
 - 💾 **Flexible Configuration** - Configurable file names, URLs, and limits
-- ⚡ **Batch Updates** - Full document updates with one command
+- ⚡  **Batch Updates** - Full document updates with one command
 - 🧹 **Smart Formatting** - Automatic spacing cleanup and consistent formatting
 
 ## Prerequisites

@@ -224,7 +224,7 @@ public class DocumentCommands {
             @ShellOption(defaultValue = "https://calendar.spring.io/ical") String calendarUrl,
             @ShellOption(defaultValue = "10") int newsLimit,
             @ShellOption(defaultValue = "7") int daysPast,
-            @ShellOption(defaultValue = "30") int daysAhead,
+            @ShellOption(defaultValue = "10") int daysAhead,
             @ShellOption(defaultValue = "10") int youtubeLimit) {
 
         StringBuilder result = new StringBuilder();
