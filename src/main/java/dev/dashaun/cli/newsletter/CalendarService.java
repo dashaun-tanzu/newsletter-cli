@@ -9,9 +9,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.StringReader;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -21,6 +23,9 @@ public class CalendarService {
 
     private final WebClient webClient;
     private static final String DEFAULT_CALENDAR_URL = "https://calendar.spring.io/ical";
+
+    private static final int MAX_ATTEMPTS = 3;
+    private static final Duration INITIAL_BACKOFF = Duration.ofSeconds(2);
 
     // Pattern to extract version numbers from event summaries
     private static final Pattern VERSION_PATTERN = Pattern.compile("(\\d+\\.\\d+(?:\\.\\d+)?(?:-[A-Z0-9]+)?)", Pattern.CASE_INSENSITIVE);
@@ -33,11 +38,17 @@ public class CalendarService {
 
     public List<ReleaseEvent> fetchUpcomingReleases(String calendarUrl, int daysAhead) {
         try {
-            String icalContent = webClient.get()
-                    .uri(calendarUrl != null ? calendarUrl : DEFAULT_CALENDAR_URL)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .block();
+            String icalContent = RetryUtils.executeWithRetry(new Callable<String>() {
+                @Override
+                public String call() {
+                    return webClient.get()
+                            .uri(calendarUrl != null ? calendarUrl : DEFAULT_CALENDAR_URL)
+                            .retrieve()
+                            .bodyToMono(String.class)
+                            .timeout(Duration.ofSeconds(30))
+                            .block();
+                }
+            }, MAX_ATTEMPTS, INITIAL_BACKOFF);
 
             CalendarBuilder builder = new CalendarBuilder();
             Calendar calendar = builder.build(new StringReader(icalContent));
@@ -70,11 +81,17 @@ public class CalendarService {
 
     public List<ReleaseEvent> fetchRecentReleases(String calendarUrl, int daysPast) {
         try {
-            String icalContent = webClient.get()
-                    .uri(calendarUrl != null ? calendarUrl : DEFAULT_CALENDAR_URL)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .block();
+            String icalContent = RetryUtils.executeWithRetry(new Callable<String>() {
+                @Override
+                public String call() {
+                    return webClient.get()
+                            .uri(calendarUrl != null ? calendarUrl : DEFAULT_CALENDAR_URL)
+                            .retrieve()
+                            .bodyToMono(String.class)
+                            .timeout(Duration.ofSeconds(30))
+                            .block();
+                }
+            }, MAX_ATTEMPTS, INITIAL_BACKOFF);
 
             CalendarBuilder builder = new CalendarBuilder();
             Calendar calendar = builder.build(new StringReader(icalContent));
@@ -157,7 +174,7 @@ public class CalendarService {
                 !lowerSummary.contains("planning");
     }
 
-    private boolean isEnterpriseReleaseEvent(String summary){
+    public boolean isEnterpriseReleaseEvent(String summary){
         return (summary.contains("(Enterprise)"));
     }
 

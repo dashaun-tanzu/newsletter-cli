@@ -1,12 +1,16 @@
 package dev.dashaun.cli.newsletter;
 
+import org.springframework.http.client.BufferingClientHttpRequestFactory;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -18,16 +22,26 @@ public class GitHubService {
     private static final String GITHUB_API_BASE = "https://api.github.com";
     private static final String ORG_NAME = "dashaun-tanzu";
 
+    private static final int MAX_ATTEMPTS = 3;
+    private static final Duration INITIAL_BACKOFF = Duration.ofSeconds(2);
+
     public GitHubService() {
-        this.restTemplate = new RestTemplate();
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(30000);
+        requestFactory.setReadTimeout(30000);
+        this.restTemplate = new RestTemplate(new BufferingClientHttpRequestFactory(requestFactory));
     }
 
     public List<DemoRepository> fetchDemoRepositories() {
         try {
             String apiUrl = String.format("%s/orgs/%s/repos?type=public&per_page=100", GITHUB_API_BASE, ORG_NAME);
 
-            // Fetch as plain string to avoid JSON parsing issues
-            String jsonResponse = restTemplate.getForObject(apiUrl, String.class);
+            String jsonResponse = RetryUtils.executeWithRetry(new Callable<String>() {
+                @Override
+                public String call() {
+                    return restTemplate.getForObject(apiUrl, String.class);
+                }
+            }, MAX_ATTEMPTS, INITIAL_BACKOFF);
 
             if (jsonResponse == null || jsonResponse.trim().isEmpty()) {
                 return List.of();
@@ -51,7 +65,11 @@ public class GitHubService {
         }
     }
 
-    private List<DemoRepository> parseRepositories(String jsonResponse) {
+    public List<DemoRepository> parseRepositories(String jsonResponse) {
+        if (jsonResponse == null || jsonResponse.trim().isEmpty()) {
+            return List.of();
+        }
+        
         List<DemoRepository> repositories = new ArrayList<>();
 
         // Find all repository objects in the JSON array
@@ -88,7 +106,7 @@ public class GitHubService {
         return repositories;
     }
 
-    private String extractJsonField(String json, String fieldName) {
+    public String extractJsonField(String json, String fieldName) {
         Pattern pattern = Pattern.compile("\"" + fieldName + "\"\\s*:\\s*\"([^\"]*)\"|\"" + fieldName + "\"\\s*:\\s*(null)");
         Matcher matcher = pattern.matcher(json);
         if (matcher.find()) {
@@ -97,7 +115,7 @@ public class GitHubService {
         return null;
     }
 
-    private boolean isArchived(String jsonResponse, String repoName) {
+    public boolean isArchived(String jsonResponse, String repoName) {
         // Look for the archived field in the same object that contains this repo name
         String repoSection = extractRepoSection(jsonResponse, repoName);
         if (repoSection != null) {
@@ -110,7 +128,7 @@ public class GitHubService {
         return false;
     }
 
-    private String extractRepoSection(String jsonResponse, String repoName) {
+    public String extractRepoSection(String jsonResponse, String repoName) {
         // Find the section of JSON that contains this repo
         Pattern pattern = Pattern.compile("\\{[^{}]*\"name\"\\s*:\\s*\"" + Pattern.quote(repoName) + "\"[^{}]*\\}");
         Matcher matcher = pattern.matcher(jsonResponse);

@@ -5,7 +5,7 @@
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
-    <version>3.5.4</version>
+    <version>3.5.14</version>
     <relativePath></relativePath>
   </parent>
   <groupId>dev.dashaun.cli</groupId>
@@ -27,7 +27,7 @@
   </scm>
   <properties>
     <spring-shell.version>3.4.1</spring-shell.version>
-    <java.version>21</java.version>
+    <java.version>17</java.version>
   </properties>
   <dependencyManagement>
     <dependencies>
@@ -76,6 +76,17 @@
     <dependency>
       <groupId>org.springframework.shell</groupId>
       <artifactId>spring-shell-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.github.tomakehurst</groupId>
+      <artifactId>wiremock-jre8-standalone</artifactId>
+      <version>2.35.1</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

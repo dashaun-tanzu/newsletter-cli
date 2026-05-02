@@ -13,11 +13,15 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.concurrent.Callable;
 
 @Service
 public class RssService {
 
     private final WebClient webClient;
+
+    private static final int MAX_ATTEMPTS = 3;
+    private static final Duration INITIAL_BACKOFF = Duration.ofSeconds(2);
 
     public RssService() {
         this.webClient = WebClient.builder()
@@ -39,12 +43,17 @@ public class RssService {
 
     public List<NewsItem> fetchLatestNews(String rssUrl, int limit) {
         try {
-            String rssContent = webClient.get()
-                    .uri(rssUrl)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .timeout(Duration.ofSeconds(30))
-                    .block();
+            String rssContent = RetryUtils.executeWithRetry(new Callable<String>() {
+                @Override
+                public String call() {
+                    return webClient.get()
+                            .uri(rssUrl)
+                            .retrieve()
+                            .bodyToMono(String.class)
+                            .timeout(Duration.ofSeconds(30))
+                            .block();
+                }
+            }, MAX_ATTEMPTS, INITIAL_BACKOFF);
 
             SyndFeed feed = parseRssContent(rssContent);
             

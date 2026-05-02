@@ -9,16 +9,21 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 
 @Service
 public class YouTubeService {
 
     private final WebClient webClient;
+    
+    private static final int MAX_ATTEMPTS = 3;
+    private static final Duration INITIAL_BACKOFF = Duration.ofSeconds(2);
     
     // Channel URLs mapped to their RSS feed URLs  
     private static final List<ChannelInfo> CHANNELS = List.of(
@@ -28,7 +33,9 @@ public class YouTubeService {
     );
 
     public YouTubeService() {
-        this.webClient = WebClient.builder().build();
+        this.webClient = WebClient.builder()
+                .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(1024 * 1024))
+                .build();
     }
 
     public List<YouTubeVideo> fetchLatestVideos(int limit) {
@@ -52,14 +59,20 @@ public class YouTubeService {
     }
 
     private List<YouTubeVideo> fetchVideosFromChannel(ChannelInfo channel, int limit) {
+        String rssUrl = "https://www.youtube.com/feeds/videos.xml?channel_id=" + channel.getChannelId();
+        
         try {
-            // All channels now use channel IDs
-            String rssUrl = "https://www.youtube.com/feeds/videos.xml?channel_id=" + channel.getChannelId();
-            String rssContent = webClient.get()
-                    .uri(rssUrl)
-                    .retrieve()
-                    .bodyToMono(String.class)
-                    .block();
+            String rssContent = RetryUtils.executeWithRetry(new Callable<String>() {
+                @Override
+                public String call() {
+                    return webClient.get()
+                            .uri(rssUrl)
+                            .retrieve()
+                            .bodyToMono(String.class)
+                            .timeout(Duration.ofSeconds(30))
+                            .block();
+                }
+            }, MAX_ATTEMPTS, INITIAL_BACKOFF);
 
             SyndFeed feed = parseRssContent(rssContent);
             if (feed == null) {

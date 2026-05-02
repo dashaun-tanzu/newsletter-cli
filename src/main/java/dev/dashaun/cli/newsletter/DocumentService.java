@@ -70,7 +70,7 @@ public class DocumentService {
             String updatedContent = content.substring(0, matcher.start(2)) +
                     newsSection +
                     content.substring(matcher.end(2));
-            Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
+            writeDocumentWithCleanup(path, updatedContent);
         } else {
             // If no news section found, add it after the date
             String datePattern = "^# (.+)$";
@@ -81,7 +81,7 @@ public class DocumentService {
                 String updatedContent = content.substring(0, dateMatcher.end()) +
                         "\n\n## News:\n\n" + newsSection +
                         content.substring(dateMatcher.end());
-                Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
+                writeDocumentWithCleanup(path, updatedContent);
             }
         }
     }
@@ -109,7 +109,7 @@ public class DocumentService {
             String updatedContent = content.substring(0, matcher.start(2)) +
                     youtubeSection +
                     content.substring(matcher.end(2));
-            Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
+            writeDocumentWithCleanup(path, updatedContent);
         } else {
             // If no YouTube section found, add it before the Demos section
             Pattern demosPattern = Pattern.compile("(## Demos:\\s*\\n)", Pattern.DOTALL);
@@ -119,11 +119,11 @@ public class DocumentService {
                 String updatedContent = content.substring(0, demosMatcher.start()) +
                         "## YouTube:\n\n" + youtubeSection + "\n" +
                         content.substring(demosMatcher.start());
-                Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
+                writeDocumentWithCleanup(path, updatedContent);
             } else {
                 // If no demos section, add at the end
                 String updatedContent = content.trim() + "\n\n## YouTube:\n\n" + youtubeSection + "\n";
-                Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
+                writeDocumentWithCleanup(path, updatedContent);
             }
         }
     }
@@ -175,7 +175,7 @@ public class DocumentService {
             String updatedContent = content.substring(0, matcher.start(2)) +
                     updatedReleases +
                     content.substring(matcher.end(2));
-            Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
+            writeDocumentWithCleanup(path, updatedContent);
         } else {
             // Section doesn't exist, create it after the News section
             Matcher newsMatcher = NEWS_SECTION_PATTERN.matcher(content);
@@ -184,7 +184,7 @@ public class DocumentService {
                 String updatedContent = content.substring(0, newsMatcher.end()) +
                         "\n## Recent Enterprise Releases:\n\n" + newReleases +
                         content.substring(newsMatcher.end());
-                Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
+                writeDocumentWithCleanup(path, updatedContent);
             }
         }
     }
@@ -213,7 +213,7 @@ public class DocumentService {
             String updatedContent = content.substring(0, matcher.start(2)) +
                     upcomingSection +
                     content.substring(matcher.end(2));
-            Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
+            writeDocumentWithCleanup(path, updatedContent);
         }
     }
 
@@ -231,7 +231,7 @@ public class DocumentService {
         if (matcher.find()) {
             String updatedContent = content.substring(0, matcher.start(2)) +
                     "\n" + demoDescription + "\n\n";
-            Files.writeString(path, updatedContent, StandardOpenOption.TRUNCATE_EXISTING);
+            writeDocumentWithCleanup(path, updatedContent);
         }
     }
 
@@ -267,7 +267,7 @@ public class DocumentService {
 
     private String removeDoubleSpacing(String content) {
         // Replace multiple consecutive blank lines with single blank lines
-        return content.replaceAll("\\n\\n\\n+", "\n\n");
+        return content.replaceAll("\\n{3,}", "\n\n");
     }
 
     private void writeDocumentWithCleanup(Path path, String content) throws IOException {
