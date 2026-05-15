@@ -1,7 +1,9 @@
 package dev.dashaun.cli.newsletter;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -59,6 +61,36 @@ class YouTubeServiceTest {
         
         assertNotNull(video);
         assertNull(video.getPublishedDate());
+    }
+
+    @Test
+    void retryPredicateShouldRetryOn404() {
+        WebClientResponseException notFound =
+                WebClientResponseException.create(404, "Not Found", null, null, null);
+        assertTrue(YouTubeService.RETRY_PREDICATE.test(notFound));
+    }
+
+    @Test
+    void retryPredicateShouldRetryOn404WrappedInCauseChain() {
+        WebClientResponseException notFound =
+                WebClientResponseException.create(404, "Not Found", null, null, null);
+        RuntimeException wrapped = new RuntimeException("upstream failure",
+                new RuntimeException("inner", notFound));
+        assertTrue(YouTubeService.RETRY_PREDICATE.test(wrapped));
+    }
+
+    @Test
+    void retryPredicateShouldDelegateToDefaultForRetryableTypes() {
+        assertTrue(YouTubeService.RETRY_PREDICATE.test(new IOException("boom")));
+        assertTrue(YouTubeService.RETRY_PREDICATE.test(
+                WebClientResponseException.create(503, "Service Unavailable", null, null, null)));
+    }
+
+    @Test
+    void retryPredicateShouldNotRetryOn403() {
+        WebClientResponseException forbidden =
+                WebClientResponseException.create(403, "Forbidden", null, null, null);
+        assertFalse(YouTubeService.RETRY_PREDICATE.test(forbidden));
     }
 
     @Test

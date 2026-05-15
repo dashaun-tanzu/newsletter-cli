@@ -6,6 +6,7 @@ import com.rometools.rome.io.SyndFeedInput;
 import com.rometools.rome.io.XmlReader;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
@@ -15,6 +16,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 @Service
@@ -24,6 +26,22 @@ public class YouTubeService {
     
     private static final int MAX_ATTEMPTS = 3;
     private static final Duration INITIAL_BACKOFF = Duration.ofSeconds(2);
+
+    // YouTube's feed endpoint occasionally returns transient 404s that resolve on retry.
+    static final Predicate<Exception> RETRY_PREDICATE = e -> {
+        if (RetryUtils.isRetryableException(e)) {
+            return true;
+        }
+        for (Throwable t = e; t != null; t = t.getCause()) {
+            if (t instanceof WebClientResponseException wcre && wcre.getStatusCode().value() == 404) {
+                return true;
+            }
+            if (t.getCause() == t) {
+                break;
+            }
+        }
+        return false;
+    };
     
     // Channel URLs mapped to their RSS feed URLs  
     private static final List<ChannelInfo> CHANNELS = List.of(
@@ -47,7 +65,15 @@ public class YouTubeService {
                 allVideos.addAll(channelVideos);
             } catch (Exception e) {
                 // Continue with other channels if one fails
-                System.err.println("Failed to fetch videos from " + channel.getName() + ": " + e.getMessage());
+                System.err.println("Failed to fetch videos from " + channel.getName() + ": "
+                        + e.getClass().getSimpleName() + ": " + e.getMessage());
+                Throwable root = e;
+                while (root.getCause() != null && root.getCause() != root) {
+                    root = root.getCause();
+                }
+                if (root != e) {
+                    System.err.println("  root cause: " + root.getClass().getName() + ": " + root.getMessage());
+                }
             }
         }
         
@@ -72,7 +98,7 @@ public class YouTubeService {
                             .timeout(Duration.ofSeconds(30))
                             .block();
                 }
-            }, MAX_ATTEMPTS, INITIAL_BACKOFF);
+            }, MAX_ATTEMPTS, INITIAL_BACKOFF, RETRY_PREDICATE);
 
             SyndFeed feed = parseRssContent(rssContent);
             if (feed == null) {
