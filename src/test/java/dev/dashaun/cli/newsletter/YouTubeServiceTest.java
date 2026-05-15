@@ -1,5 +1,7 @@
 package dev.dashaun.cli.newsletter;
 
+import com.rometools.rome.feed.synd.SyndEntry;
+import com.rometools.rome.feed.synd.SyndEntryImpl;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
@@ -84,6 +86,50 @@ class YouTubeServiceTest {
         assertTrue(YouTubeService.RETRY_PREDICATE.test(new IOException("boom")));
         assertTrue(YouTubeService.RETRY_PREDICATE.test(
                 WebClientResponseException.create(503, "Service Unavailable", null, null, null)));
+    }
+
+    @Test
+    void isShortShouldDetectShortsLink() {
+        SyndEntry shortEntry = new SyndEntryImpl();
+        shortEntry.setLink("https://www.youtube.com/shorts/mP1IV166bp8");
+        assertTrue(YouTubeService.isShort(shortEntry));
+    }
+
+    @Test
+    void isShortShouldNotFlagRegularVideo() {
+        SyndEntry videoEntry = new SyndEntryImpl();
+        videoEntry.setLink("https://www.youtube.com/watch?v=n2fPHV8741o");
+        assertFalse(YouTubeService.isShort(videoEntry));
+    }
+
+    @Test
+    void isShortShouldHandleNullLink() {
+        SyndEntry entry = new SyndEntryImpl();
+        // link is null by default
+        assertFalse(YouTubeService.isShort(entry));
+    }
+
+    @Test
+    void filterShouldExcludeShortsFromMixedList() {
+        SyndEntry video1 = new SyndEntryImpl();
+        video1.setLink("https://www.youtube.com/watch?v=AAA");
+        video1.setTitle("Regular video 1");
+
+        SyndEntry shortVid = new SyndEntryImpl();
+        shortVid.setLink("https://www.youtube.com/shorts/SHORT1");
+        shortVid.setTitle("Short clip");
+
+        SyndEntry video2 = new SyndEntryImpl();
+        video2.setLink("https://www.youtube.com/watch?v=BBB");
+        video2.setTitle("Regular video 2");
+
+        List<SyndEntry> kept = List.of(video1, shortVid, video2).stream()
+                .filter(e -> !YouTubeService.isShort(e))
+                .toList();
+
+        assertEquals(2, kept.size());
+        assertEquals("Regular video 1", kept.get(0).getTitle());
+        assertEquals("Regular video 2", kept.get(1).getTitle());
     }
 
     @Test

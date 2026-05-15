@@ -106,6 +106,7 @@ public class YouTubeService {
             }
 
             return feed.getEntries().stream()
+                    .filter(entry -> !isShort(entry))
                     .limit(limit)
                     .map(entry -> convertToYouTubeVideo(entry, channel.getName()))
                     .collect(Collectors.toList());
@@ -113,6 +114,11 @@ public class YouTubeService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to fetch videos from " + channel.getName() + ": " + e.getMessage(), e);
         }
+    }
+
+    static boolean isShort(SyndEntry entry) {
+        String link = entry.getLink();
+        return link != null && link.contains("/shorts/");
     }
 
     private SyndFeed parseRssContent(String xmlContent) {
