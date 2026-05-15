@@ -12,19 +12,6 @@
   <artifactId>newsletter</artifactId>
   <version>0</version>
   <name>${project.groupId}.${project.artifactId}</name>
-  <url></url>
-  <licenses>
-    <license />
-  </licenses>
-  <developers>
-    <developer />
-  </developers>
-  <scm>
-    <connection></connection>
-    <developerConnection></developerConnection>
-    <tag></tag>
-    <url></url>
-  </scm>
   <properties>
     <spring-shell.version>3.4.2</spring-shell.version>
     <java.version>17</java.version>
