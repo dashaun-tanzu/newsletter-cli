@@ -1,14 +1,14 @@
 package dev.dashaun.cli.newsletter;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.shell.standard.ShellComponent;
-import org.springframework.shell.standard.ShellMethod;
-import org.springframework.shell.standard.ShellOption;
+import org.springframework.shell.core.command.annotation.Command;
+import org.springframework.shell.core.command.annotation.Option;
+import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.util.List;
 
-@ShellComponent
+@Component
 public class DocumentCommands {
 
     private final RssService rssService;
@@ -26,8 +26,9 @@ public class DocumentCommands {
         this.gitHubService = gitHubService;
     }
 
-    @ShellMethod(value = "Create a new document with template", key = "create")
-    public String createDocument(@ShellOption(defaultValue = "spring-update.md") String filename) {
+    @Command(name = "create", description = "Create a new document with template")
+    public String createDocument(
+            @Option(longName = "filename", defaultValue = "spring-update.md") String filename) {
         try {
             documentService.createNewDocument(filename);
             return "Created new document: " + filename;
@@ -36,11 +37,11 @@ public class DocumentCommands {
         }
     }
 
-    @ShellMethod(value = "Update news section from RSS feed", key = "update-news")
+    @Command(name = "update-news", description = "Update news section from RSS feed")
     public String updateNews(
-            @ShellOption(defaultValue = "spring-update.md") String filename,
-            @ShellOption(defaultValue = "https://spring.io/blog/category/releases.atom") String rssUrl,
-            @ShellOption(defaultValue = "10") int limit) {
+            @Option(longName = "filename", defaultValue = "spring-update.md") String filename,
+            @Option(longName = "rssUrl", defaultValue = "https://spring.io/blog/category/releases.atom") String rssUrl,
+            @Option(longName = "limit", defaultValue = "10") int limit) {
 
         try {
             List<RssService.NewsItem> newsItems = rssService.fetchLatestNews(rssUrl, limit);
@@ -51,8 +52,9 @@ public class DocumentCommands {
         }
     }
 
-    @ShellMethod(value = "Show the current document content", key = "show")
-    public String showDocument(@ShellOption(defaultValue = "spring-update.md") String filename) {
+    @Command(name = "show", description = "Show the current document content")
+    public String showDocument(
+            @Option(longName = "filename", defaultValue = "spring-update.md") String filename) {
         try {
             return documentService.readDocument(filename);
         } catch (IOException e) {
@@ -60,10 +62,10 @@ public class DocumentCommands {
         }
     }
 
-    @ShellMethod(value = "Update the demo section", key = "update-demo")
+    @Command(name = "update-demo", description = "Update the demo section")
     public String updateDemo(
-            @ShellOption(defaultValue = "spring-update.md") String filename,
-            String demo) {
+            @Option(longName = "filename", defaultValue = "spring-update.md") String filename,
+            @Option(longName = "demo") String demo) {
 
         try {
             documentService.updateDemo(filename, demo);
@@ -73,8 +75,9 @@ public class DocumentCommands {
         }
     }
 
-    @ShellMethod(value = "Update demos section with GitHub repositories ending in '-demo'", key = "update-github-demos")
-    public String updateGitHubDemos(@ShellOption(defaultValue = "spring-update.md") String filename) {
+    @Command(name = "update-github-demos", description = "Update demos section with GitHub repositories ending in '-demo'")
+    public String updateGitHubDemos(
+            @Option(longName = "filename", defaultValue = "spring-update.md") String filename) {
         try {
             List<GitHubService.DemoRepository> demoRepos = gitHubService.fetchDemoRepositories();
             documentService.updateGitHubDemos(filename, demoRepos);
@@ -84,7 +87,7 @@ public class DocumentCommands {
         }
     }
 
-    @ShellMethod(value = "Preview GitHub demo repositories", key = "preview-github-demos")
+    @Command(name = "preview-github-demos", description = "Preview GitHub demo repositories")
     public String previewGitHubDemos() {
         try {
             List<GitHubService.DemoRepository> demoRepos = gitHubService.fetchDemoRepositories();
@@ -98,10 +101,10 @@ public class DocumentCommands {
         }
     }
 
-    @ShellMethod(value = "Update YouTube section with latest videos", key = "update-youtube")
+    @Command(name = "update-youtube", description = "Update YouTube section with latest videos")
     public String updateYouTube(
-            @ShellOption(defaultValue = "spring-update.md") String filename,
-            @ShellOption(defaultValue = "10") int limit) {
+            @Option(longName = "filename", defaultValue = "spring-update.md") String filename,
+            @Option(longName = "limit", defaultValue = "10") int limit) {
 
         try {
             List<YouTubeService.YouTubeVideo> videos = youTubeService.fetchLatestVideos(limit);
@@ -112,8 +115,9 @@ public class DocumentCommands {
         }
     }
 
-    @ShellMethod(value = "Preview latest YouTube videos (without updating document)", key = "preview-youtube")
-    public String previewYouTube(@ShellOption(defaultValue = "10") int limit) {
+    @Command(name = "preview-youtube", description = "Preview latest YouTube videos (without updating document)")
+    public String previewYouTube(
+            @Option(longName = "limit", defaultValue = "10") int limit) {
         try {
             List<YouTubeService.YouTubeVideo> videos = youTubeService.fetchLatestVideos(limit);
             StringBuilder preview = new StringBuilder("Latest YouTube videos:\n\n");
@@ -126,10 +130,10 @@ public class DocumentCommands {
         }
     }
 
-    @ShellMethod(value = "Fetch latest news from RSS (preview only)", key = "preview-news")
+    @Command(name = "preview-news", description = "Fetch latest news from RSS (preview only)")
     public String previewNews(
-            @ShellOption(defaultValue = "https://spring.io/blog/category/releases.atom") String rssUrl,
-            @ShellOption(defaultValue = "5") int limit) {
+            @Option(longName = "rssUrl", defaultValue = "https://spring.io/blog/category/releases.atom") String rssUrl,
+            @Option(longName = "limit", defaultValue = "5") int limit) {
 
         try {
             List<RssService.NewsItem> newsItems = rssService.fetchLatestNews(rssUrl, limit);
@@ -143,11 +147,11 @@ public class DocumentCommands {
         }
     }
 
-    @ShellMethod(value = "Update releases from Spring calendar", key = "update-releases")
+    @Command(name = "update-releases", description = "Update releases from Spring calendar")
     public String updateReleasesFromCalendar(
-            @ShellOption(defaultValue = "spring-update.md") String filename,
-            @ShellOption(defaultValue = "https://calendar.spring.io/ical") String calendarUrl,
-            @ShellOption(defaultValue = "7") int daysPast) {
+            @Option(longName = "filename", defaultValue = "spring-update.md") String filename,
+            @Option(longName = "calendarUrl", defaultValue = "https://calendar.spring.io/ical") String calendarUrl,
+            @Option(longName = "daysPast", defaultValue = "7") int daysPast) {
 
         try {
             List<CalendarService.ReleaseEvent> recentReleases = calendarService.fetchRecentReleases(calendarUrl, daysPast);
@@ -163,11 +167,11 @@ public class DocumentCommands {
         }
     }
 
-    @ShellMethod(value = "Update upcoming releases section", key = "update-upcoming")
+    @Command(name = "update-upcoming", description = "Update upcoming releases section")
     public String updateUpcomingReleases(
-            @ShellOption(defaultValue = "spring-update.md") String filename,
-            @ShellOption(defaultValue = "https://calendar.spring.io/ical") String calendarUrl,
-            @ShellOption(defaultValue = "30") int daysAhead) {
+            @Option(longName = "filename", defaultValue = "spring-update.md") String filename,
+            @Option(longName = "calendarUrl", defaultValue = "https://calendar.spring.io/ical") String calendarUrl,
+            @Option(longName = "daysAhead", defaultValue = "30") int daysAhead) {
 
         try {
             List<CalendarService.ReleaseEvent> upcomingReleases = calendarService.fetchUpcomingReleases(calendarUrl, daysAhead);
@@ -183,11 +187,11 @@ public class DocumentCommands {
         }
     }
 
-    @ShellMethod(value = "Preview calendar releases without updating", key = "preview-calendar")
+    @Command(name = "preview-calendar", description = "Preview calendar releases without updating")
     public String previewCalendarReleases(
-            @ShellOption(defaultValue = "https://calendar.spring.io/ical") String calendarUrl,
-            @ShellOption(defaultValue = "7") int daysPast,
-            @ShellOption(defaultValue = "30") int daysAhead) {
+            @Option(longName = "calendarUrl", defaultValue = "https://calendar.spring.io/ical") String calendarUrl,
+            @Option(longName = "daysPast", defaultValue = "7") int daysPast,
+            @Option(longName = "daysAhead", defaultValue = "30") int daysAhead) {
 
         try {
             List<CalendarService.ReleaseEvent> recentReleases = calendarService.fetchRecentReleases(calendarUrl, daysPast);
@@ -217,15 +221,15 @@ public class DocumentCommands {
         }
     }
 
-    @ShellMethod(value = "Full document update (news + releases + upcoming + youtube)", key = "full-update")
+    @Command(name = "full-update", description = "Full document update (news + releases + upcoming + youtube)")
     public String fullUpdate(
-            @ShellOption(defaultValue = "spring-update.md") String filename,
-            @ShellOption(defaultValue = "https://spring.io/blog/category/releases.atom") String rssUrl,
-            @ShellOption(defaultValue = "https://calendar.spring.io/ical") String calendarUrl,
-            @ShellOption(defaultValue = "10") int newsLimit,
-            @ShellOption(defaultValue = "7") int daysPast,
-            @ShellOption(defaultValue = "10") int daysAhead,
-            @ShellOption(defaultValue = "10") int youtubeLimit) {
+            @Option(longName = "filename", defaultValue = "spring-update.md") String filename,
+            @Option(longName = "rssUrl", defaultValue = "https://spring.io/blog/category/releases.atom") String rssUrl,
+            @Option(longName = "calendarUrl", defaultValue = "https://calendar.spring.io/ical") String calendarUrl,
+            @Option(longName = "newsLimit", defaultValue = "10") int newsLimit,
+            @Option(longName = "daysPast", defaultValue = "7") int daysPast,
+            @Option(longName = "daysAhead", defaultValue = "10") int daysAhead,
+            @Option(longName = "youtubeLimit", defaultValue = "10") int youtubeLimit) {
 
         StringBuilder result = new StringBuilder();
 
@@ -271,38 +275,39 @@ public class DocumentCommands {
             return "Error during full update: " + e.getMessage();
         }
     }
-    @ShellMethod(value = "Show help for document management", key = "help-doc")
+
+    @Command(name = "help-doc", description = "Show help for document management")
     public String showHelp() {
         return """
                 Document Updater Commands:
-                
+
                 Document Management:
                   create [filename]                         - Create a new document with template
                   show [filename]                           - Show current document content
-                
+
                 News Management:
                   update-news [filename] [rssUrl] [limit]   - Update news section from RSS feed
                   preview-news [rssUrl] [limit]             - Preview latest news from RSS
-                
+
                 Release Management:
                   update-releases [filename] [calendarUrl] [daysPast] - Update releases from Spring calendar
                   update-upcoming [filename] [calendarUrl] [daysAhead] - Update upcoming releases section
                   preview-calendar [calendarUrl] [daysPast] [daysAhead] - Preview calendar releases
                   add-release [filename] date release       - Manually add an enterprise release
-                
+
                 YouTube Management:
                   update-youtube [filename] [limit]         - Update YouTube section with latest videos
                   preview-youtube [limit]                   - Preview latest YouTube videos
-                
+
                 Demo Management:
                   update-demo [filename] demo               - Update the demo section manually
                   update-github-demos [filename]           - Update demos with GitHub repositories ending in '-demo'
                   preview-github-demos                      - Preview GitHub demo repositories
-                
+
                 Full Update:
                   full-update [filename] [rssUrl] [calendarUrl] [newsLimit] [daysPast] [daysAhead] [youtubeLimit]
                                                             - Update everything at once (includes GitHub demos)
-                
+
                 Examples:
                   create my-doc.md
                   update-news

@@ -13,7 +13,7 @@
   <version>0</version>
   <name>${project.groupId}.${project.artifactId}</name>
   <properties>
-    <spring-shell.version>3.4.2</spring-shell.version>
+    <spring-shell.version>4.0.2</spring-shell.version>
     <java.version>17</java.version>
   </properties>
   <dependencyManagement>
