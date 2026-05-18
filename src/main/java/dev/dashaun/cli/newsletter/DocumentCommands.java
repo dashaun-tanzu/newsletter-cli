@@ -40,7 +40,7 @@ public class DocumentCommands {
     @Command(name = "update-news", description = "Update news section from RSS feed")
     public String updateNews(
             @Option(longName = "filename", defaultValue = "spring-update.md") String filename,
-            @Option(longName = "rssUrl", defaultValue = "https://spring.io/blog/category/releases.atom") String rssUrl,
+            @Option(longName = "rssUrl", defaultValue = "https://spring.io/blog.atom") String rssUrl,
             @Option(longName = "limit", defaultValue = "10") int limit) {
 
         try {
@@ -132,7 +132,7 @@ public class DocumentCommands {
 
     @Command(name = "preview-news", description = "Fetch latest news from RSS (preview only)")
     public String previewNews(
-            @Option(longName = "rssUrl", defaultValue = "https://spring.io/blog/category/releases.atom") String rssUrl,
+            @Option(longName = "rssUrl", defaultValue = "https://spring.io/blog.atom") String rssUrl,
             @Option(longName = "limit", defaultValue = "5") int limit) {
 
         try {
@@ -224,7 +224,7 @@ public class DocumentCommands {
     @Command(name = "full-update", description = "Full document update (news + releases + upcoming + youtube)")
     public String fullUpdate(
             @Option(longName = "filename", defaultValue = "spring-update.md") String filename,
-            @Option(longName = "rssUrl", defaultValue = "https://spring.io/blog/category/releases.atom") String rssUrl,
+            @Option(longName = "rssUrl", defaultValue = "https://spring.io/blog.atom") String rssUrl,
             @Option(longName = "calendarUrl", defaultValue = "https://calendar.spring.io/ical") String calendarUrl,
             @Option(longName = "newsLimit", defaultValue = "10") int newsLimit,
             @Option(longName = "daysPast", defaultValue = "7") int daysPast,

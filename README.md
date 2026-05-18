@@ -51,8 +51,8 @@ mvn spring-boot:run
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `update-news` | Update news section from RSS feed | `update-news my-doc.md https://spring.io/blog/category/releases.atom 10` |
-| `preview-news` | Preview latest news without updating | `preview-news https://spring.io/blog/category/releases.atom 5` |
+| `update-news` | Update news section from RSS feed | `update-news my-doc.md https://spring.io/blog.atom 10` |
+| `preview-news` | Preview latest news without updating | `preview-news https://spring.io/blog.atom 5` |
 
 ### Calendar Integration
 
@@ -134,7 +134,7 @@ mvn spring-boot:run
 
 Preview content before updating:
 ```
-shell:>preview-news https://spring.io/blog/category/releases.atom 5
+shell:>preview-news https://spring.io/blog.atom 5
 shell:>preview-youtube 10
 shell:>preview-github-demos
 shell:>preview-calendar https://calendar.spring.io/ical 7 30
@@ -152,7 +152,7 @@ shell:>update-demo weekly-update.md "[Spring AI Demo](https://github.com/spring-
 The application supports any valid RSS/Atom feed:
 
 ```
-shell:>update-news my-doc.md https://spring.io/blog.atom 15
+shell:>update-news my-doc.md https://spring.io/blog/category/releases.atom 15
 shell:>preview-news https://spring.io/blog/category/engineering.atom 3
 ```
 
