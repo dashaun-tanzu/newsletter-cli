@@ -41,7 +41,7 @@ public class DocumentCommands {
     public String updateNews(
             @Option(longName = "filename", defaultValue = "spring-update.md") String filename,
             @Option(longName = "rssUrl", defaultValue = "https://spring.io/blog.atom") String rssUrl,
-            @Option(longName = "limit", defaultValue = "10") int limit) {
+            @Option(longName = "limit", defaultValue = "8") int limit) {
 
         try {
             List<RssService.NewsItem> newsItems = rssService.fetchLatestNews(rssUrl, limit);
@@ -226,7 +226,7 @@ public class DocumentCommands {
             @Option(longName = "filename", defaultValue = "spring-update.md") String filename,
             @Option(longName = "rssUrl", defaultValue = "https://spring.io/blog.atom") String rssUrl,
             @Option(longName = "calendarUrl", defaultValue = "https://calendar.spring.io/ical") String calendarUrl,
-            @Option(longName = "newsLimit", defaultValue = "10") int newsLimit,
+            @Option(longName = "newsLimit", defaultValue = "8") int newsLimit,
             @Option(longName = "daysPast", defaultValue = "7") int daysPast,
             @Option(longName = "daysAhead", defaultValue = "10") int daysAhead,
             @Option(longName = "youtubeLimit", defaultValue = "10") int youtubeLimit) {
