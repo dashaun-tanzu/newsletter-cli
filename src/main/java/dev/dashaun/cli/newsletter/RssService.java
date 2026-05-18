@@ -12,7 +12,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 
 @Service
@@ -39,6 +42,26 @@ public class RssService {
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse RSS content: " + e.getMessage(), e);
         }
+    }
+
+    public List<NewsItem> fetchLatestNews(List<String> rssUrls, int limit) {
+        Map<String, NewsItem> uniqueByLink = new LinkedHashMap<>();
+        for (String url : rssUrls) {
+            try {
+                for (NewsItem item : fetchLatestNews(url, Integer.MAX_VALUE)) {
+                    uniqueByLink.putIfAbsent(item.link(), item);
+                }
+            } catch (Exception e) {
+                System.err.println("Failed to fetch " + url + ": " + e.getMessage());
+            }
+        }
+        Comparator<NewsItem> byDateDesc = Comparator.comparing(
+                NewsItem::publishedDate,
+                Comparator.nullsLast(Comparator.reverseOrder()));
+        return uniqueByLink.values().stream()
+                .sorted(byDateDesc)
+                .limit(limit)
+                .toList();
     }
 
     public List<NewsItem> fetchLatestNews(String rssUrl, int limit) {

@@ -6,10 +6,24 @@ import org.springframework.shell.core.command.annotation.Option;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 
 @Component
 public class DocumentCommands {
+
+    static final String DEFAULT_NEWS_FEEDS =
+            "https://spring.io/blog.atom,"
+            + "https://spring.io/blog/category/releases.atom,"
+            + "https://spring.io/blog/category/engineering.atom,"
+            + "https://spring.io/blog/category/news.atom";
+
+    private static List<String> splitFeeds(String csv) {
+        return Arrays.stream(csv.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
+    }
 
     private final RssService rssService;
     private final DocumentService documentService;
@@ -40,13 +54,14 @@ public class DocumentCommands {
     @Command(name = "update-news", description = "Update news section from RSS feed")
     public String updateNews(
             @Option(longName = "filename", defaultValue = "spring-update.md") String filename,
-            @Option(longName = "rssUrl", defaultValue = "https://spring.io/blog.atom") String rssUrl,
+            @Option(longName = "rssUrl", defaultValue = DEFAULT_NEWS_FEEDS) String rssUrl,
             @Option(longName = "limit", defaultValue = "8") int limit) {
 
         try {
-            List<RssService.NewsItem> newsItems = rssService.fetchLatestNews(rssUrl, limit);
+            List<String> feeds = splitFeeds(rssUrl);
+            List<RssService.NewsItem> newsItems = rssService.fetchLatestNews(feeds, limit);
             documentService.updateNewsSection(filename, newsItems);
-            return String.format("Updated news section with %d items from %s", newsItems.size(), rssUrl);
+            return String.format("Updated news section with %d items from %d feed(s)", newsItems.size(), feeds.size());
         } catch (Exception e) {
             return "Error updating news: " + e.getMessage();
         }
@@ -132,11 +147,11 @@ public class DocumentCommands {
 
     @Command(name = "preview-news", description = "Fetch latest news from RSS (preview only)")
     public String previewNews(
-            @Option(longName = "rssUrl", defaultValue = "https://spring.io/blog.atom") String rssUrl,
+            @Option(longName = "rssUrl", defaultValue = DEFAULT_NEWS_FEEDS) String rssUrl,
             @Option(longName = "limit", defaultValue = "5") int limit) {
 
         try {
-            List<RssService.NewsItem> newsItems = rssService.fetchLatestNews(rssUrl, limit);
+            List<RssService.NewsItem> newsItems = rssService.fetchLatestNews(splitFeeds(rssUrl), limit);
             StringBuilder preview = new StringBuilder("Latest news from RSS:\n\n");
             for (RssService.NewsItem item : newsItems) {
                 preview.append(item.toString()).append("\n");
@@ -224,7 +239,7 @@ public class DocumentCommands {
     @Command(name = "full-update", description = "Full document update (news + releases + upcoming + youtube)")
     public String fullUpdate(
             @Option(longName = "filename", defaultValue = "spring-update.md") String filename,
-            @Option(longName = "rssUrl", defaultValue = "https://spring.io/blog.atom") String rssUrl,
+            @Option(longName = "rssUrl", defaultValue = DEFAULT_NEWS_FEEDS) String rssUrl,
             @Option(longName = "calendarUrl", defaultValue = "https://calendar.spring.io/ical") String calendarUrl,
             @Option(longName = "newsLimit", defaultValue = "8") int newsLimit,
             @Option(longName = "daysPast", defaultValue = "7") int daysPast,
@@ -235,7 +250,7 @@ public class DocumentCommands {
 
         try {
             // Update news
-            List<RssService.NewsItem> newsItems = rssService.fetchLatestNews(rssUrl, newsLimit);
+            List<RssService.NewsItem> newsItems = rssService.fetchLatestNews(splitFeeds(rssUrl), newsLimit);
             documentService.updateNewsSection(filename, newsItems);
             result.append("✓ Updated news section with ").append(newsItems.size()).append(" items\n");
 
