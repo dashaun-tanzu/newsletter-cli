@@ -24,8 +24,11 @@ public class YouTubeService {
 
     private final WebClient webClient;
     
-    private static final int MAX_ATTEMPTS = 3;
-    private static final Duration INITIAL_BACKOFF = Duration.ofSeconds(2);
+    // YouTube's feed endpoint can stay 404 for tens of seconds; defaults of 3 attempts /
+    // 2s backoff (6s window) routinely miss the recovery. 5 attempts at 5s → 10s → 20s → 40s
+    // gives a ~75s window per channel without making the job absurdly long.
+    private static final int MAX_ATTEMPTS = 5;
+    private static final Duration INITIAL_BACKOFF = Duration.ofSeconds(5);
 
     // YouTube's feed endpoint occasionally returns transient 404s that resolve on retry.
     static final Predicate<Exception> RETRY_PREDICATE = e -> {
