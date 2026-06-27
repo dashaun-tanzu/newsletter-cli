@@ -179,6 +179,40 @@ class GitHubServiceTest {
     }
 
     @Test
+    void shouldUseDescriptionWhenRepoHasNestedObjects() {
+        // Mirrors the real GitHub API shape: the "owner" object precedes "description".
+        String jsonResponse = "[{\"name\":\"saa-petclinic-demo\","
+                + "\"owner\":{\"login\":\"dashaun-tanzu\",\"html_url\":\"https://github.com/dashaun-tanzu\"},"
+                + "\"html_url\":\"https://github.com/dashaun-tanzu/saa-petclinic-demo\","
+                + "\"description\":\"PetClinic on Spring Boot\","
+                + "\"updated_at\":\"2024-06-01T00:00:00Z\",\"archived\":false}]";
+
+        GitHubService service = new GitHubService();
+        List<GitHubService.DemoRepository> repos = service.parseRepositories(jsonResponse);
+
+        assertEquals(1, repos.size());
+        assertEquals("saa-petclinic-demo", repos.get(0).getName());
+        assertEquals("PetClinic on Spring Boot", repos.get(0).getDescription());
+        assertEquals("https://github.com/dashaun-tanzu/saa-petclinic-demo", repos.get(0).getUrl());
+    }
+
+    @Test
+    void shouldDetectArchivedWhenRepoHasNestedObjects() {
+        // Mirrors the real GitHub API shape: nested "owner" object before "archived".
+        String jsonResponse = "[{\"name\":\"archived-demo\","
+                + "\"owner\":{\"login\":\"dashaun-tanzu\",\"html_url\":\"https://github.com/dashaun-tanzu\"},"
+                + "\"description\":\"Old\",\"archived\":true},"
+                + "{\"name\":\"active-demo\","
+                + "\"owner\":{\"login\":\"dashaun-tanzu\",\"html_url\":\"https://github.com/dashaun-tanzu\"},"
+                + "\"description\":\"New\",\"archived\":false}]";
+
+        GitHubService service = new GitHubService();
+
+        assertTrue(service.isArchived(jsonResponse, "archived-demo"));
+        assertFalse(service.isArchived(jsonResponse, "active-demo"));
+    }
+
+    @Test
     void shouldHandleNullJsonResponse() {
         GitHubService service = new GitHubService();
         

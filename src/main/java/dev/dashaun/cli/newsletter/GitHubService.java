@@ -72,13 +72,11 @@ public class GitHubService {
         
         List<DemoRepository> repositories = new ArrayList<>();
 
-        // Find all repository objects in the JSON array
-        Pattern repoPattern = Pattern.compile("\\{[^}]*\"name\"[^}]*\\}");
-        Matcher repoMatcher = repoPattern.matcher(jsonResponse);
-
-        while (repoMatcher.find()) {
-            String repoJson = repoMatcher.group();
-
+        // Split the array into top-level repository objects, accounting for nested
+        // objects (owner, license, ...) and braces inside strings. A naive
+        // "\\{[^}]*\\}" stops at the first nested '}' and drops fields such as
+        // "description" that follow the nested "owner" object.
+        for (String repoJson : extractTopLevelObjects(jsonResponse)) {
             String name = extractJsonField(repoJson, "name");
             String description = extractJsonField(repoJson, "description");
             String htmlUrl = extractJsonField(repoJson, "html_url");
@@ -106,6 +104,50 @@ public class GitHubService {
         return repositories;
     }
 
+    // Returns each top-level JSON object ("{...}") from a JSON array, matching braces
+    // while ignoring any that appear inside string literals.
+    List<String> extractTopLevelObjects(String json) {
+        List<String> objects = new ArrayList<>();
+        int depth = 0;
+        int start = -1;
+        boolean inString = false;
+        boolean escaped = false;
+
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (inString) {
+                if (escaped) {
+                    escaped = false;
+                } else if (c == '\\') {
+                    escaped = true;
+                } else if (c == '"') {
+                    inString = false;
+                }
+                continue;
+            }
+            switch (c) {
+                case '"' -> inString = true;
+                case '{' -> {
+                    if (depth == 0) {
+                        start = i;
+                    }
+                    depth++;
+                }
+                case '}' -> {
+                    if (depth > 0) {
+                        depth--;
+                        if (depth == 0 && start >= 0) {
+                            objects.add(json.substring(start, i + 1));
+                            start = -1;
+                        }
+                    }
+                }
+                default -> { }
+            }
+        }
+        return objects;
+    }
+
     public String extractJsonField(String json, String fieldName) {
         Pattern pattern = Pattern.compile("\"" + fieldName + "\"\\s*:\\s*\"([^\"]*)\"|\"" + fieldName + "\"\\s*:\\s*(null)");
         Matcher matcher = pattern.matcher(json);
@@ -129,11 +171,15 @@ public class GitHubService {
     }
 
     public String extractRepoSection(String jsonResponse, String repoName) {
-        // Find the section of JSON that contains this repo
-        Pattern pattern = Pattern.compile("\\{[^{}]*\"name\"\\s*:\\s*\"" + Pattern.quote(repoName) + "\"[^{}]*\\}");
-        Matcher matcher = pattern.matcher(jsonResponse);
-        if (matcher.find()) {
-            return matcher.group();
+        if (jsonResponse == null || repoName == null) {
+            return null;
+        }
+        // Return the full top-level object whose "name" matches, so nested objects
+        // (owner, license) don't truncate the section like a brace-naive regex would.
+        for (String repoJson : extractTopLevelObjects(jsonResponse)) {
+            if (repoName.equals(extractJsonField(repoJson, "name"))) {
+                return repoJson;
+            }
         }
         return null;
     }
