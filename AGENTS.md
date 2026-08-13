@@ -23,7 +23,11 @@ java -jar target/newsletter-0.0.1-SNAPSHOT.jar <command> [options]
 ./mvnw -Pnative native:compile              # GraalVM native image (recent commits track native fixes)
 ```
 
-Targets **Java 21** (`pom.xml` `java.version`). Use SDKMAN to switch JDKs.
+Targets **Java 25** (`pom.xml` `java.version`), matching `java-version: '25'` in
+`.github/workflows/release.yml`. The JDK is pinned in `.sdkmanrc` (`25.0.4-librca`) — run
+`sdk env` in this directory (or `sdk env install` the first time), or set
+`sdkman_auto_env=true` in `~/.sdkman/etc/config` to have it switch automatically. Building on
+an older JDK fails with `release version 25 not supported`.
 
 ## Architecture
 

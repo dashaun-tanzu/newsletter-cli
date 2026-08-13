@@ -1,0 +1,6 @@
+# Toolchain for this project. With `sdkman_auto_env=true` in ~/.sdkman/etc/config,
+# entering this directory switches the JDK automatically; otherwise run `sdk env`
+# (or `sdk env install` the first time) before building.
+#
+# Matches java-version 25 in .github/workflows/release.yml and <java.version> in pom.xml.
+java=25.0.4-librca

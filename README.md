@@ -16,8 +16,15 @@ A Spring Shell-based CLI application for generating and managing newsletter docu
 
 ## Prerequisites
 
-- Java 21 or later
+- Java 25 or later
 - Maven 3.6 or later
+
+The JDK is pinned in `.sdkmanrc`. With [SDKMAN](https://sdkman.io) installed:
+
+```bash
+sdk env install   # first time: installs 25.0.4-librca
+sdk env           # thereafter: switches this shell to the pinned JDK
+```
 
 ## Building the Application
 
