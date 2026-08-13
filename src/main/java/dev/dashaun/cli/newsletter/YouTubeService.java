@@ -27,8 +27,11 @@ public class YouTubeService {
     // YouTube's feed endpoint can stay 404 for tens of seconds; defaults of 3 attempts /
     // 2s backoff (6s window) routinely miss the recovery. 5 attempts at 5s → 10s → 20s → 40s
     // gives a ~75s window per channel without making the job absurdly long.
-    private static final int MAX_ATTEMPTS = 5;
-    private static final Duration INITIAL_BACKOFF = Duration.ofSeconds(5);
+    private static final int DEFAULT_MAX_ATTEMPTS = 5;
+    private static final Duration DEFAULT_INITIAL_BACKOFF = Duration.ofSeconds(5);
+
+    private final int maxAttempts;
+    private final Duration initialBackoff;
 
     // YouTube's feed endpoint occasionally returns transient 404s that resolve on retry.
     static final Predicate<Exception> RETRY_PREDICATE = e -> {
@@ -53,21 +56,50 @@ public class YouTubeService {
         new ChannelInfo("Dan Vega", "UCc98QQw1D-y38wg6mO3w4MQ")
     );
 
+    static final String DEFAULT_FEED_BASE_URL = "https://www.youtube.com/feeds/videos.xml";
+
+    // Reactor Netty's default agent gets throttled harder than a named client on the
+    // shared CI egress addresses, which is where the transient 404s cluster.
+    private static final String USER_AGENT =
+            "newsletter-cli (+https://github.com/dashaun-tanzu/newsletter-cli)";
+
+    private final String feedBaseUrl;
+
     public YouTubeService() {
+        this(DEFAULT_FEED_BASE_URL, DEFAULT_MAX_ATTEMPTS, DEFAULT_INITIAL_BACKOFF);
+    }
+
+    YouTubeService(String feedBaseUrl, int maxAttempts, Duration initialBackoff) {
+        this.feedBaseUrl = feedBaseUrl;
+        this.maxAttempts = maxAttempts;
+        this.initialBackoff = initialBackoff;
         this.webClient = WebClient.builder()
+                .defaultHeader(org.springframework.http.HttpHeaders.USER_AGENT, USER_AGENT)
                 .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(1024 * 1024))
                 .build();
     }
 
+    /**
+     * Fetches videos across all channels. A channel that fails is skipped so one bad feed
+     * cannot blank the section, but if <em>every</em> channel fails that is an outage, not an
+     * empty result — it throws rather than reporting "0 videos" to a caller that would happily
+     * publish an empty section.
+     */
     public List<YouTubeVideo> fetchLatestVideos(int limit) {
+        if (limit <= 0) {
+            return new ArrayList<>();
+        }
+
         List<YouTubeVideo> allVideos = new ArrayList<>();
-        
+        List<String> failedChannels = new ArrayList<>();
+
         for (ChannelInfo channel : CHANNELS) {
             try {
                 List<YouTubeVideo> channelVideos = fetchVideosFromChannel(channel, limit);
                 allVideos.addAll(channelVideos);
             } catch (Exception e) {
                 // Continue with other channels if one fails
+                failedChannels.add(channel.getName());
                 System.err.println("Failed to fetch videos from " + channel.getName() + ": "
                         + e.getClass().getSimpleName() + ": " + e.getMessage());
                 Throwable root = e;
@@ -79,7 +111,13 @@ public class YouTubeService {
                 }
             }
         }
-        
+
+        if (failedChannels.size() == CHANNELS.size()) {
+            throw new YouTubeUnavailableException(
+                    "all " + CHANNELS.size() + " channel feeds failed after retries ("
+                            + String.join(", ", failedChannels) + ")");
+        }
+
         // Sort by published date (most recent first) and limit results
         return allVideos.stream()
                 .sorted((a, b) -> b.getPublishedDate().compareTo(a.getPublishedDate()))
@@ -87,9 +125,16 @@ public class YouTubeService {
                 .collect(Collectors.toList());
     }
 
+    /** Thrown when every channel feed fails, i.e. the section cannot be built at all. */
+    public static class YouTubeUnavailableException extends RuntimeException {
+        public YouTubeUnavailableException(String message) {
+            super(message);
+        }
+    }
+
     private List<YouTubeVideo> fetchVideosFromChannel(ChannelInfo channel, int limit) {
-        String rssUrl = "https://www.youtube.com/feeds/videos.xml?channel_id=" + channel.getChannelId();
-        
+        String rssUrl = feedBaseUrl + "?channel_id=" + channel.getChannelId();
+
         try {
             String rssContent = RetryUtils.executeWithRetry(new Callable<String>() {
                 @Override
@@ -101,7 +146,7 @@ public class YouTubeService {
                             .timeout(Duration.ofSeconds(30))
                             .block();
                 }
-            }, MAX_ATTEMPTS, INITIAL_BACKOFF, RETRY_PREDICATE);
+            }, maxAttempts, initialBackoff, RETRY_PREDICATE);
 
             SyndFeed feed = parseRssContent(rssContent);
             if (feed == null) {

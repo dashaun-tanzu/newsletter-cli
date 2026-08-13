@@ -7,7 +7,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class NewsletterApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(NewsletterApplication.class, args);
+		// SpringApplication.exit consults the ExitCodeTracker bean, so a section that failed
+		// every retry surfaces as a non-zero exit instead of a silently incomplete document.
+		System.exit(SpringApplication.exit(SpringApplication.run(NewsletterApplication.class, args)));
 	}
 
 }

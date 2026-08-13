@@ -50,16 +50,27 @@ independent source-fetchers, with one service owning all file mutation:
   `WebClientRequestException` / `TimeoutException` / `IOException`. Callers can pass a custom
   predicate — `YouTubeService` extends it to also retry transient 404s (its feed endpoint
   404s for tens of seconds), which is why YouTube uses a longer window (5 attempts, 5s initial
-  backoff) than RSS/GitHub (3 attempts, 2s).
+  backoff) than RSS/GitHub (3 attempts, 2s). Every sleep gets ±25% jitter (fetchers hit several
+  endpoints on one host in sequence; without jitter the retries arrive in lockstep), is capped at
+  `MAX_BACKOFF` (60s), and yields to a numeric `Retry-After` response header when the server
+  sends one.
+- **`ExitCodeTracker`** — an `ExitCodeGenerator` bean letting a command report a degraded run
+  without aborting the rest of the document. `NewsletterApplication.main` wraps
+  `SpringApplication.run` in `SpringApplication.exit`, so a marked failure becomes a non-zero
+  process exit. Without it a command returns a String and always exits 0, and a caller cannot
+  tell a failed run from a good one.
 
 ## Conventions worth preserving
 
 - **The markdown document is the data model and the output.** Section headings are load-bearing;
   changing a heading string means changing the matching regex in `DocumentService`. The document
   layout is created by `createNewDocument`.
-- **Fetchers degrade gracefully, never fatally.** `RssService` and `YouTubeService` skip a failing
-  feed/channel (log to stderr, continue) rather than aborting the whole command. Preserve this —
-  one dead source shouldn't sink an entire `full-update`.
+- **Fetchers degrade gracefully, never fatally — but an outage is not an empty result.**
+  `RssService` and `YouTubeService` skip a failing feed/channel (log to stderr, continue) rather
+  than aborting the whole command. Preserve this — one dead source shouldn't sink an entire
+  `full-update`. What must NOT happen is returning an empty collection when *every* source failed:
+  that is indistinguishable from "nothing new", and it caused the newsletter repo to publish a
+  blank YouTube section. See below.
 - **Default news feeds** are a comma-separated CSV constant `DocumentCommands.DEFAULT_NEWS_FEEDS`
   (four spring.io Atom feeds), split + deduped by link in `RssService.fetchLatestNews`. Default
   news limit is 8.
@@ -69,8 +80,32 @@ independent source-fetchers, with one service owning all file mutation:
 - **YouTube channels** are a hardcoded list in `YouTubeService.CHANNELS`; Shorts are filtered out
   (`isShort` checks for `/shorts/` in the link).
 
+## YouTube reliability
+
+The feed endpoint returns transient 404s, and when it does it typically fails for **all** channels
+at once, for minutes at a time. The retry budget alone cannot fix that, so the failure is made
+visible instead of silently producing an empty section:
+
+- Budget is 5 attempts at 5s→10s→20s→40s, ~75s per channel. Channels run sequentially, so a total
+  outage takes ~3m45s to declare — a `full-update` that takes ~4 minutes is this failure happening.
+- A named `User-Agent` is sent. Reactor Netty's default agent is throttled harder on shared CI
+  egress addresses, which is where the 404s cluster.
+- One channel failing is skipped. **Every** channel failing throws `YouTubeUnavailableException`.
+- `DocumentCommands` catches that exception **inline**, not in the outer `full-update` try/catch —
+  letting it reach the outer handler would skip the demos section that runs after YouTube. On
+  failure it leaves the existing section untouched instead of overwriting it with an empty list,
+  and marks `ExitCodeTracker` so the process exits non-zero.
+
 ## Testing
 
 JUnit 5 + Spring Boot test. External HTTP is stubbed with **WireMock** (`wiremock-jre8-standalone`);
 shell command tests use `spring-shell-starter-test`. When adding a fetcher, add a WireMock-backed
 service test mirroring the existing `*ServiceTest` classes — do not hit live endpoints in tests.
+
+`YouTubeService` has a package-private `(feedBaseUrl, maxAttempts, initialBackoff)` constructor so
+tests can point at WireMock and shorten the retry budget; production uses the no-arg constructor.
+Without that seam the failure tests would sit through the real 225s budget. Keep new retry-related
+tests hermetic the same way.
+
+Note: `CLAUDE.md` is gitignored here — **this file is the committed guidance.** Mirror anything
+durable into it.

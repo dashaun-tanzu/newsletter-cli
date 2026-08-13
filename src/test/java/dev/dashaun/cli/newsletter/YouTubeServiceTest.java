@@ -1,14 +1,22 @@
 package dev.dashaun.cli.newsletter;
 
+import com.github.tomakehurst.wiremock.WireMockServer;
 import com.rometools.rome.feed.synd.SyndEntry;
 import com.rometools.rome.feed.synd.SyndEntryImpl;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 
+import static com.github.tomakehurst.wiremock.client.WireMock.*;
+import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
+import static com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED;
 import static org.junit.jupiter.api.Assertions.*;
 
 class YouTubeServiceTest {
@@ -46,10 +54,114 @@ class YouTubeServiceTest {
     @Test
     void shouldReturnEmptyListWhenLimitIsZero() {
         YouTubeService service = new YouTubeService();
-        
+
         List<YouTubeService.YouTubeVideo> videos = service.fetchLatestVideos(0);
-        
+
         assertTrue(videos.isEmpty());
+    }
+
+    @Nested
+    class FeedFailures {
+
+        private static final String ATOM_FEED = """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <feed xmlns="http://www.w3.org/2005/Atom">
+                  <title>Test Channel</title>
+                  <entry>
+                    <id>yt:video:AAA</id>
+                    <title>A Real Video</title>
+                    <link rel="alternate" href="https://www.youtube.com/watch?v=AAA"/>
+                    <published>2026-08-01T12:00:00+00:00</published>
+                    <updated>2026-08-01T12:00:00+00:00</updated>
+                  </entry>
+                </feed>
+                """;
+
+        private WireMockServer wireMock;
+
+        @BeforeEach
+        void startServer() {
+            wireMock = new WireMockServer(options().dynamicPort());
+            wireMock.start();
+        }
+
+        @AfterEach
+        void stopServer() {
+            wireMock.stop();
+        }
+
+        /** Retries are shortened so the test does not sit through the production 75s-per-channel budget. */
+        private YouTubeService serviceUnderTest() {
+            return new YouTubeService(wireMock.baseUrl() + "/feeds/videos.xml", 2, Duration.ofMillis(1));
+        }
+
+        @Test
+        void shouldThrowWhenEveryChannelFeedFails() {
+            wireMock.stubFor(get(urlPathEqualTo("/feeds/videos.xml"))
+                    .willReturn(aResponse().withStatus(404)));
+
+            YouTubeService service = serviceUnderTest();
+
+            YouTubeService.YouTubeUnavailableException thrown = assertThrows(
+                    YouTubeService.YouTubeUnavailableException.class,
+                    () -> service.fetchLatestVideos(10));
+
+            // The whole point: an outage must not be reported as "0 videos".
+            assertTrue(thrown.getMessage().contains("all 3 channel feeds failed"),
+                    "unexpected message: " + thrown.getMessage());
+        }
+
+        @Test
+        void shouldReturnVideosWhenOnlySomeChannelsFail() {
+            // Coffee + Software succeeds; the other two 404 forever.
+            wireMock.stubFor(get(urlPathEqualTo("/feeds/videos.xml"))
+                    .willReturn(aResponse().withStatus(404)));
+            wireMock.stubFor(get(urlPathEqualTo("/feeds/videos.xml"))
+                    .withQueryParam("channel_id", equalTo("UCjcceQmjS4DKBW_J_1UANow"))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Type", "application/atom+xml")
+                            .withBody(ATOM_FEED)));
+
+            List<YouTubeService.YouTubeVideo> videos = serviceUnderTest().fetchLatestVideos(10);
+
+            assertEquals(1, videos.size());
+            assertEquals("A Real Video", videos.get(0).getTitle());
+            assertEquals("Coffee + Software", videos.get(0).getChannelName());
+        }
+
+        @Test
+        void shouldRetryTransient404ThenSucceed() {
+            String scenario = "flaky feed";
+            wireMock.stubFor(get(urlPathEqualTo("/feeds/videos.xml")).inScenario(scenario)
+                    .whenScenarioStateIs(STARTED)
+                    .willReturn(aResponse().withStatus(404))
+                    .willSetStateTo("recovered"));
+            wireMock.stubFor(get(urlPathEqualTo("/feeds/videos.xml")).inScenario(scenario)
+                    .whenScenarioStateIs("recovered")
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Type", "application/atom+xml")
+                            .withBody(ATOM_FEED)));
+
+            List<YouTubeService.YouTubeVideo> videos = serviceUnderTest().fetchLatestVideos(10);
+
+            assertFalse(videos.isEmpty(), "a transient 404 should be retried, not given up on");
+        }
+
+        @Test
+        void shouldSendIdentifiableUserAgent() {
+            wireMock.stubFor(get(urlPathEqualTo("/feeds/videos.xml"))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader("Content-Type", "application/atom+xml")
+                            .withBody(ATOM_FEED)));
+
+            serviceUnderTest().fetchLatestVideos(10);
+
+            wireMock.verify(getRequestedFor(urlPathEqualTo("/feeds/videos.xml"))
+                    .withHeader("User-Agent", containing("newsletter-cli")));
+        }
     }
 
     @Test

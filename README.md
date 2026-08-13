@@ -196,6 +196,26 @@ The CLI provides helpful error messages for common issues:
 - File system permissions
 - Malformed RSS content
 
+### Retries
+
+Every remote fetch retries with exponential backoff before giving up, with ±25% jitter so
+repeated calls to the same host don't arrive in lockstep. A numeric `Retry-After` response
+header takes precedence over the computed delay. YouTube gets a wider budget than the other
+sources — 5 attempts starting at 5s, about 75s per channel — because its feed endpoint returns
+transient 404s that can last tens of seconds.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| `0`  | All requested sections were updated |
+| `1`  | A section could not be fetched after all retries |
+
+A section that fails is **left as it was** rather than being overwritten with an empty list, and
+the remaining sections are still updated. This matters for automation: a YouTube outage returns
+exit `1` with the previous video list intact, so a caller can retry or fall back instead of
+publishing a blank section. Check the exit code — an error message alone does not mean failure.
+
 ## Contributing
 
 1. Fork the repository

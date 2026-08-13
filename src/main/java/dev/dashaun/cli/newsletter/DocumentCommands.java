@@ -30,14 +30,16 @@ public class DocumentCommands {
     private final CalendarService calendarService;
     private final YouTubeService youTubeService;
     private final GitHubService gitHubService;
+    private final ExitCodeTracker exitCodeTracker;
 
     @Autowired
-    public DocumentCommands(RssService rssService, DocumentService documentService, CalendarService calendarService, YouTubeService youTubeService, GitHubService gitHubService) {
+    public DocumentCommands(RssService rssService, DocumentService documentService, CalendarService calendarService, YouTubeService youTubeService, GitHubService gitHubService, ExitCodeTracker exitCodeTracker) {
         this.rssService = rssService;
         this.documentService = documentService;
         this.calendarService = calendarService;
         this.youTubeService = youTubeService;
         this.gitHubService = gitHubService;
+        this.exitCodeTracker = exitCodeTracker;
     }
 
     @Command(name = "create", description = "Create a new document with template")
@@ -125,7 +127,12 @@ public class DocumentCommands {
             List<YouTubeService.YouTubeVideo> videos = youTubeService.fetchLatestVideos(limit);
             documentService.updateYouTubeSection(filename, videos);
             return String.format("Updated YouTube section with %d videos", videos.size());
+        } catch (YouTubeService.YouTubeUnavailableException e) {
+            // Leave the existing section alone rather than replacing it with nothing.
+            exitCodeTracker.markFailure();
+            return "YouTube section left unchanged: " + e.getMessage();
         } catch (Exception e) {
+            exitCodeTracker.markFailure();
             return "Error updating YouTube section: " + e.getMessage();
         }
     }
@@ -272,10 +279,17 @@ public class DocumentCommands {
                 result.append("✓ Updated upcoming releases with default projects\n");
             }
 
-            // Update YouTube section
-            List<YouTubeService.YouTubeVideo> videos = youTubeService.fetchLatestVideos(youtubeLimit);
-            documentService.updateYouTubeSection(filename, videos);
-            result.append("✓ Updated YouTube section with ").append(videos.size()).append(" videos\n");
+            // Update YouTube section. Handled inline so an outage still leaves the remaining
+            // sections (demos) to be written, and leaves any existing YouTube content in place
+            // rather than replacing it with an empty list.
+            try {
+                List<YouTubeService.YouTubeVideo> videos = youTubeService.fetchLatestVideos(youtubeLimit);
+                documentService.updateYouTubeSection(filename, videos);
+                result.append("✓ Updated YouTube section with ").append(videos.size()).append(" videos\n");
+            } catch (YouTubeService.YouTubeUnavailableException e) {
+                exitCodeTracker.markFailure();
+                result.append("✗ YouTube section left unchanged: ").append(e.getMessage()).append('\n');
+            }
 
             // Update GitHub demos
             List<GitHubService.DemoRepository> demoRepos = gitHubService.fetchDemoRepositories();

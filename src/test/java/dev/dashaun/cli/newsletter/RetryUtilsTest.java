@@ -1,6 +1,7 @@
 package dev.dashaun.cli.newsletter;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
@@ -167,5 +168,76 @@ class RetryUtilsTest {
         RuntimeException nested = new RuntimeException("outer",
                 new IllegalStateException("inner"));
         assertFalse(RetryUtils.isRetryableException(nested));
+    }
+
+    @Test
+    void shouldCapBackoffAtMaximum() {
+        assertEquals(RetryUtils.MAX_BACKOFF, RetryUtils.cap(Duration.ofHours(1)));
+        assertEquals(Duration.ofSeconds(5), RetryUtils.cap(Duration.ofSeconds(5)));
+    }
+
+    @Test
+    void jitterShouldStayWithinTwentyFivePercentOfBackoff() {
+        Duration base = Duration.ofSeconds(8);
+        for (int i = 0; i < 200; i++) {
+            long millis = RetryUtils.applyJitter(base).toMillis();
+            assertTrue(millis >= 6000 && millis <= 10000,
+                    "jittered backoff out of range: " + millis + "ms");
+        }
+    }
+
+    @Test
+    void jitterShouldLeaveTinyBackoffUnchanged() {
+        // Sub-4ms backoffs have no room for a +/-25% spread; they must not become negative.
+        assertEquals(Duration.ofMillis(1), RetryUtils.applyJitter(Duration.ofMillis(1)));
+        assertEquals(Duration.ZERO, RetryUtils.applyJitter(Duration.ZERO));
+    }
+
+    @Test
+    void shouldHonourNumericRetryAfterHeader() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Retry-After", "12");
+        WebClientResponseException throttled = WebClientResponseException.create(
+                429, "Too Many Requests", headers, null, null);
+
+        assertEquals(Duration.ofSeconds(12), RetryUtils.retryAfter(throttled));
+    }
+
+    @Test
+    void shouldCapRetryAfterHeader() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Retry-After", "86400");
+        WebClientResponseException throttled = WebClientResponseException.create(
+                429, "Too Many Requests", headers, null, null);
+
+        assertEquals(RetryUtils.MAX_BACKOFF, RetryUtils.retryAfter(throttled));
+    }
+
+    @Test
+    void shouldIgnoreHttpDateRetryAfterAndFallBackToBackoff() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Retry-After", "Wed, 21 Oct 2026 07:28:00 GMT");
+        WebClientResponseException throttled = WebClientResponseException.create(
+                429, "Too Many Requests", headers, null, null);
+
+        assertNull(RetryUtils.retryAfter(throttled));
+    }
+
+    @Test
+    void shouldReturnNullRetryAfterWhenHeaderAbsent() {
+        assertNull(RetryUtils.retryAfter(new IOException("boom")));
+        assertNull(RetryUtils.retryAfter(
+                WebClientResponseException.create(503, "Service Unavailable", null, null, null)));
+    }
+
+    @Test
+    void shouldFindRetryAfterThroughCauseChain() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Retry-After", "3");
+        WebClientResponseException throttled = WebClientResponseException.create(
+                429, "Too Many Requests", headers, null, null);
+        RuntimeException wrapped = new RuntimeException("outer", new RuntimeException("inner", throttled));
+
+        assertEquals(Duration.ofSeconds(3), RetryUtils.retryAfter(wrapped));
     }
 }
