@@ -87,11 +87,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      # merge-multiple pins the layout: every artifact's contents land directly in dist/,
+      # regardless of whether the action creates a per-artifact directory. v4 nested the file
+      # under ./newsletter-linux-amd64/, v8 dropped it flat in the workspace root, and the
+      # `*/newsletter-*` glob that assumed the nesting silently published an assetless release.
       - name: Download all artifacts
         uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
 
       - name: List downloaded artifacts
-        run: find . -name "newsletter-*" -type f -exec ls -la {} \;
+        run: ls -laR dist
 
       - name: Generate changelog
         id: changelog
@@ -124,7 +131,10 @@ jobs:
           body: ${{ steps.changelog.outputs.changelog }}
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}  # Mark as prerelease if tag contains '-' (e.g., v1.0.0-beta)
+          # Without this the action shrugs off a glob that matches nothing and publishes a
+          # release with no binary attached, reporting success the whole way.
+          fail_on_unmatched_files: true
           files: |
-            */newsletter-*
+            dist/newsletter-*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
