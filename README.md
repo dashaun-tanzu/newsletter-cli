@@ -211,12 +211,25 @@ header takes precedence over the computed delay. YouTube gets a wider budget tha
 sources — 5 attempts starting at 5s, about 75s per channel — because its feed endpoint returns
 transient 404s that can last tens of seconds.
 
+YouTube adds a second layer on top of that: any channel that produced no video (an error, or a
+`200` with nothing publishable) is **swept again** — the whole fetch re-run 20s later, up to 3
+sweeps — so a channel in a minutes-long outage still gets a chance instead of being written off
+in the first 75s. The sweeps stop early once a 5 minute overall budget is spent.
+
+### YouTube channel coverage
+
+The YouTube section is expected to carry **at least one video from every channel** (Coffee +
+Software, SpringSourceDev, Dan Vega). Selection reserves one slot per channel and fills the rest
+by recency, so a prolific channel can't take every slot and make the quiet ones look broken. If a
+channel still has no video after all retries and sweeps, the section is written with what was
+fetched, the missing channels are named in the command output, and the run exits `1`.
+
 ### Exit codes
 
 | Code | Meaning |
 |------|---------|
 | `0`  | All requested sections were updated |
-| `1`  | A section could not be fetched after all retries |
+| `1`  | A section could not be fetched after all retries, or the YouTube section is missing a channel |
 
 A section that fails is **left as it was** rather than being overwritten with an empty list, and
 the remaining sections are still updated. This matters for automation: a YouTube outage returns

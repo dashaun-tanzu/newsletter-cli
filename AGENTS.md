@@ -94,11 +94,32 @@ visible instead of silently producing an empty section:
   outage takes ~3m45s to declare — a `full-update` that takes ~4 minutes is this failure happening.
 - A named `User-Agent` is sent. Reactor Netty's default agent is throttled harder on shared CI
   egress addresses, which is where the 404s cluster.
+- **Channel sweeps** sit on top of the per-request retries: a channel that produced no video is
+  re-fetched from scratch after a 20s pause, up to `DEFAULT_CHANNEL_SWEEPS` (3) passes. All the
+  per-request retries land inside one ~75s window, which is simply too early when the outage runs
+  for minutes; a sweep puts the next attempt minutes after the first. `MAX_TOTAL_DURATION` (5m)
+  caps the whole thing — a sweep only starts if the budget still has room.
+- A `200` carrying nothing publishable (e.g. Shorts only) counts as a **failed** channel, not an
+  empty one: either way the channel would be missing from the newsletter.
 - One channel failing is skipped. **Every** channel failing throws `YouTubeUnavailableException`.
 - `DocumentCommands` catches that exception **inline**, not in the outer `full-update` try/catch —
   letting it reach the outer handler would skip the demos section that runs after YouTube. On
   failure it leaves the existing section untouched instead of overwriting it with an empty list,
   and marks `ExitCodeTracker` so the process exits non-zero.
+
+### Every channel must be represented
+
+Each channel is expected to contribute **at least one video**. Two pieces enforce that:
+
+- `fetchLatest(limit)` returns a `FetchResult(videos, missingChannels)`; `fetchLatestVideos` is a
+  thin wrapper kept for callers that only want the list. `DocumentCommands` uses `fetchLatest`, and
+  on a non-empty `missingChannels` it still writes the section (partial content beats none) but
+  names the missing channels and marks `ExitCodeTracker`. A channel silently absent from the
+  newsletter was the bug; a partial run must not exit 0.
+- `selectVideos` reserves one slot per channel and fills the remaining slots by recency, instead of
+  taking the globally newest N. Coffee + Software posts far more often than the others, so the
+  plain "latest 10" could hand it every slot — indistinguishable from the other channels failing.
+  With `limit` < channel count the most recent reserved picks win.
 
 ## Testing
 
@@ -106,8 +127,9 @@ JUnit 5 + Spring Boot test. External HTTP is stubbed with **WireMock** (`wiremoc
 shell command tests use `spring-shell-starter-test`. When adding a fetcher, add a WireMock-backed
 service test mirroring the existing `*ServiceTest` classes — do not hit live endpoints in tests.
 
-`YouTubeService` has a package-private `(feedBaseUrl, maxAttempts, initialBackoff)` constructor so
-tests can point at WireMock and shorten the retry budget; production uses the no-arg constructor.
+`YouTubeService` has a package-private
+`(feedBaseUrl, maxAttempts, initialBackoff, channelSweeps, sweepPause)` constructor so tests can
+point at WireMock and shorten both retry budgets; production uses the no-arg constructor.
 Without that seam the failure tests would sit through the real 225s budget. Keep new retry-related
 tests hermetic the same way.
 

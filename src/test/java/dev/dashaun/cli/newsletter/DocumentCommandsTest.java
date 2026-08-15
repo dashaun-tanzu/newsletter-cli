@@ -51,8 +51,17 @@ class DocumentCommandsTest {
     private static YouTubeService unavailableService() {
         return new YouTubeService() {
             @Override
-            public List<YouTubeVideo> fetchLatestVideos(int limit) {
+            public FetchResult fetchLatest(int limit) {
                 throw new YouTubeUnavailableException("all 3 channel feeds failed after retries (a, b, c)");
+            }
+        };
+    }
+
+    private static YouTubeService serviceReturning(YouTubeService.FetchResult result) {
+        return new YouTubeService() {
+            @Override
+            public FetchResult fetchLatest(int limit) {
+                return result;
             }
         };
     }
@@ -78,13 +87,10 @@ class DocumentCommandsTest {
 
     @Test
     void shouldExitZeroAndReplaceSectionOnSuccess() throws IOException {
-        YouTubeService working = new YouTubeService() {
-            @Override
-            public List<YouTubeVideo> fetchLatestVideos(int limit) {
-                return List.of(new YouTubeVideo("A Brand New Video",
-                        "https://youtube.com/watch?v=NEW", "Dan Vega", null));
-            }
-        };
+        YouTubeService working = serviceReturning(new YouTubeService.FetchResult(
+                List.of(new YouTubeService.YouTubeVideo("A Brand New Video",
+                        "https://youtube.com/watch?v=NEW", "Dan Vega", null)),
+                List.of()));
 
         String message = commandsWith(working).updateYouTube(testFile.toString(), 10);
 
@@ -94,5 +100,21 @@ class DocumentCommandsTest {
         String content = Files.readString(testFile);
         assertTrue(content.contains("A Brand New Video"));
         assertFalse(content.contains("Yesterday's video"), "a successful fetch replaces the old list");
+    }
+
+    @Test
+    void shouldFailTheRunWhenAChannelIsMissingButStillPublishWhatItGot() throws IOException {
+        YouTubeService partial = serviceReturning(new YouTubeService.FetchResult(
+                List.of(new YouTubeService.YouTubeVideo("A Brand New Video",
+                        "https://youtube.com/watch?v=NEW", "Coffee + Software", null)),
+                List.of("Dan Vega")));
+
+        String message = commandsWith(partial).updateYouTube(testFile.toString(), 10);
+
+        assertTrue(message.contains("no video from: Dan Vega"), "unexpected message: " + message);
+        assertEquals(1, exitCodeTracker.getExitCode(),
+                "a channel missing from the newsletter must not exit 0");
+        assertTrue(Files.readString(testFile).contains("A Brand New Video"),
+                "the videos we did get are still worth publishing");
     }
 }

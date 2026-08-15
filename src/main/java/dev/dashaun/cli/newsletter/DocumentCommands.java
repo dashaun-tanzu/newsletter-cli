@@ -124,9 +124,16 @@ public class DocumentCommands {
             @Option(longName = "limit", defaultValue = "10") int limit) {
 
         try {
-            List<YouTubeService.YouTubeVideo> videos = youTubeService.fetchLatestVideos(limit);
-            documentService.updateYouTubeSection(filename, videos);
-            return String.format("Updated YouTube section with %d videos", videos.size());
+            YouTubeService.FetchResult result = youTubeService.fetchLatest(limit);
+            documentService.updateYouTubeSection(filename, result.videos());
+            String message = String.format("Updated YouTube section with %d videos", result.videos().size());
+            if (!result.isComplete()) {
+                // Some content beats none, but a channel missing from the newsletter is a
+                // failed run — the caller has to be able to see that.
+                exitCodeTracker.markFailure();
+                message += ", but no video from: " + String.join(", ", result.missingChannels());
+            }
+            return message;
         } catch (YouTubeService.YouTubeUnavailableException e) {
             // Leave the existing section alone rather than replacing it with nothing.
             exitCodeTracker.markFailure();
@@ -141,10 +148,14 @@ public class DocumentCommands {
     public String previewYouTube(
             @Option(longName = "limit", defaultValue = "10") int limit) {
         try {
-            List<YouTubeService.YouTubeVideo> videos = youTubeService.fetchLatestVideos(limit);
+            YouTubeService.FetchResult result = youTubeService.fetchLatest(limit);
             StringBuilder preview = new StringBuilder("Latest YouTube videos:\n\n");
-            for (YouTubeService.YouTubeVideo video : videos) {
+            for (YouTubeService.YouTubeVideo video : result.videos()) {
                 preview.append(video.toString()).append("\n");
+            }
+            if (!result.isComplete()) {
+                preview.append("\nNo video from: ")
+                        .append(String.join(", ", result.missingChannels())).append("\n");
             }
             return preview.toString();
         } catch (Exception e) {
@@ -283,9 +294,17 @@ public class DocumentCommands {
             // sections (demos) to be written, and leaves any existing YouTube content in place
             // rather than replacing it with an empty list.
             try {
-                List<YouTubeService.YouTubeVideo> videos = youTubeService.fetchLatestVideos(youtubeLimit);
-                documentService.updateYouTubeSection(filename, videos);
-                result.append("✓ Updated YouTube section with ").append(videos.size()).append(" videos\n");
+                YouTubeService.FetchResult youtube = youTubeService.fetchLatest(youtubeLimit);
+                documentService.updateYouTubeSection(filename, youtube.videos());
+                if (youtube.isComplete()) {
+                    result.append("✓ Updated YouTube section with ").append(youtube.videos().size())
+                            .append(" videos\n");
+                } else {
+                    exitCodeTracker.markFailure();
+                    result.append("✗ Updated YouTube section with ").append(youtube.videos().size())
+                            .append(" videos, but no video from: ")
+                            .append(String.join(", ", youtube.missingChannels())).append('\n');
+                }
             } catch (YouTubeService.YouTubeUnavailableException e) {
                 exitCodeTracker.markFailure();
                 result.append("✗ YouTube section left unchanged: ").append(e.getMessage()).append('\n');

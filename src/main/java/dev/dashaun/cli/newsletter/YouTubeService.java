@@ -14,7 +14,10 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -30,8 +33,25 @@ public class YouTubeService {
     private static final int DEFAULT_MAX_ATTEMPTS = 5;
     private static final Duration DEFAULT_INITIAL_BACKOFF = Duration.ofSeconds(5);
 
+    // Every channel must contribute a video. Per-request retries all happen inside one ~75s
+    // window; when a channel is in a longer outage that window is simply too early. A sweep
+    // re-runs the whole fetch for the channels that came back with nothing, after a pause,
+    // which puts the next attempt minutes away from the first instead of seconds.
+    private static final int DEFAULT_CHANNEL_SWEEPS = 3;
+    private static final Duration DEFAULT_SWEEP_PAUSE = Duration.ofSeconds(20);
+
+    // Sweeps multiply the worst case (channels x attempts x sweeps), so cap the wall clock:
+    // a new sweep only starts if the budget still has room. A hung job helps nobody.
+    static final Duration MAX_TOTAL_DURATION = Duration.ofMinutes(5);
+
     private final int maxAttempts;
     private final Duration initialBackoff;
+    private final int channelSweeps;
+    private final Duration sweepPause;
+
+    // YouTube feeds always carry a published date, but a null must not blow up the sort.
+    static final Comparator<YouTubeVideo> BY_DATE_DESC = Comparator.comparing(
+            YouTubeVideo::getPublishedDate, Comparator.nullsLast(Comparator.reverseOrder()));
 
     // YouTube's feed endpoint occasionally returns transient 404s that resolve on retry.
     static final Predicate<Exception> RETRY_PREDICATE = e -> {
@@ -66,13 +86,17 @@ public class YouTubeService {
     private final String feedBaseUrl;
 
     public YouTubeService() {
-        this(DEFAULT_FEED_BASE_URL, DEFAULT_MAX_ATTEMPTS, DEFAULT_INITIAL_BACKOFF);
+        this(DEFAULT_FEED_BASE_URL, DEFAULT_MAX_ATTEMPTS, DEFAULT_INITIAL_BACKOFF,
+                DEFAULT_CHANNEL_SWEEPS, DEFAULT_SWEEP_PAUSE);
     }
 
-    YouTubeService(String feedBaseUrl, int maxAttempts, Duration initialBackoff) {
+    YouTubeService(String feedBaseUrl, int maxAttempts, Duration initialBackoff,
+                   int channelSweeps, Duration sweepPause) {
         this.feedBaseUrl = feedBaseUrl;
         this.maxAttempts = maxAttempts;
         this.initialBackoff = initialBackoff;
+        this.channelSweeps = channelSweeps;
+        this.sweepPause = sweepPause;
         this.webClient = WebClient.builder()
                 .defaultHeader(org.springframework.http.HttpHeaders.USER_AGENT, USER_AGENT)
                 .codecs(configurer -> configurer.defaultCodecs().maxInMemorySize(1024 * 1024))
@@ -80,49 +104,142 @@ public class YouTubeService {
     }
 
     /**
-     * Fetches videos across all channels. A channel that fails is skipped so one bad feed
-     * cannot blank the section, but if <em>every</em> channel fails that is an outage, not an
-     * empty result — it throws rather than reporting "0 videos" to a caller that would happily
-     * publish an empty section.
+     * {@link #fetchLatest(int)} for callers that only want the video list. Prefer
+     * {@code fetchLatest} where a channel coming back empty needs to be acted on.
      */
     public List<YouTubeVideo> fetchLatestVideos(int limit) {
+        return fetchLatest(limit).videos();
+    }
+
+    /**
+     * Fetches videos across all channels, guaranteeing every channel that answers is
+     * represented by at least one video, and reporting the channels that never produced one.
+     *
+     * <p>Two layers of retry sit under this: {@link RetryUtils} retries each HTTP request, and
+     * on top of that a channel that still produced nothing is swept again — the whole fetch
+     * re-run after a pause — until it yields a video, the sweeps run out, or the overall time
+     * budget does.
+     *
+     * <p>If <em>every</em> channel fails that is an outage, not an empty result: it throws
+     * rather than reporting "0 videos" to a caller that would happily publish an empty section.
+     */
+    public FetchResult fetchLatest(int limit) {
         if (limit <= 0) {
-            return new ArrayList<>();
+            return new FetchResult(new ArrayList<>(), new ArrayList<>());
         }
 
-        List<YouTubeVideo> allVideos = new ArrayList<>();
-        List<String> failedChannels = new ArrayList<>();
+        // Insertion-ordered so the reserved-slot selection below is deterministic.
+        Map<String, List<YouTubeVideo>> byChannel = new LinkedHashMap<>();
+        List<ChannelInfo> pending = new ArrayList<>(CHANNELS);
+        long deadline = System.nanoTime() + MAX_TOTAL_DURATION.toNanos();
 
-        for (ChannelInfo channel : CHANNELS) {
-            try {
-                List<YouTubeVideo> channelVideos = fetchVideosFromChannel(channel, limit);
-                allVideos.addAll(channelVideos);
-            } catch (Exception e) {
-                // Continue with other channels if one fails
-                failedChannels.add(channel.getName());
-                System.err.println("Failed to fetch videos from " + channel.getName() + ": "
-                        + e.getClass().getSimpleName() + ": " + e.getMessage());
-                Throwable root = e;
-                while (root.getCause() != null && root.getCause() != root) {
-                    root = root.getCause();
+        for (int sweep = 1; sweep <= channelSweeps && !pending.isEmpty(); sweep++) {
+            if (sweep > 1) {
+                if (System.nanoTime() >= deadline) {
+                    System.err.println("Giving up on " + pending.size()
+                            + " YouTube channel(s): " + MAX_TOTAL_DURATION.toSeconds()
+                            + "s budget exhausted before sweep " + sweep);
+                    break;
                 }
-                if (root != e) {
-                    System.err.println("  root cause: " + root.getClass().getName() + ": " + root.getMessage());
+                System.err.println("Retrying " + pending.size() + " YouTube channel(s) in "
+                        + sweepPause.toSeconds() + "s (sweep " + sweep + " of " + channelSweeps + ")");
+                pause(sweepPause);
+            }
+
+            List<ChannelInfo> stillPending = new ArrayList<>();
+            for (ChannelInfo channel : pending) {
+                try {
+                    List<YouTubeVideo> channelVideos = fetchVideosFromChannel(channel, limit);
+                    if (channelVideos.isEmpty()) {
+                        // A 200 with nothing usable is as bad as a failure for our purposes:
+                        // the channel would be missing from the newsletter either way.
+                        stillPending.add(channel);
+                        System.err.println("No usable videos from " + channel.getName()
+                                + " (sweep " + sweep + ")");
+                    } else {
+                        byChannel.put(channel.getName(), channelVideos);
+                    }
+                } catch (Exception e) {
+                    stillPending.add(channel);
+                    logChannelFailure(channel, sweep, e);
                 }
             }
+            pending = stillPending;
         }
 
-        if (failedChannels.size() == CHANNELS.size()) {
+        List<String> missingChannels = pending.stream().map(ChannelInfo::getName).toList();
+
+        if (byChannel.isEmpty()) {
             throw new YouTubeUnavailableException(
                     "all " + CHANNELS.size() + " channel feeds failed after retries ("
-                            + String.join(", ", failedChannels) + ")");
+                            + String.join(", ", missingChannels) + ")");
         }
 
-        // Sort by published date (most recent first) and limit results
-        return allVideos.stream()
-                .sorted((a, b) -> b.getPublishedDate().compareTo(a.getPublishedDate()))
-                .limit(limit)
-                .collect(Collectors.toList());
+        return new FetchResult(selectVideos(byChannel, limit), new ArrayList<>(missingChannels));
+    }
+
+    /**
+     * Picks the videos to publish: one reserved slot per channel first, then the most recent of
+     * whatever is left over. A plain "latest N across all channels" lets one prolific channel
+     * take every slot, which looks exactly like the quiet channels having failed.
+     */
+    static List<YouTubeVideo> selectVideos(Map<String, List<YouTubeVideo>> byChannel, int limit) {
+        List<YouTubeVideo> selected = new ArrayList<>();
+        List<YouTubeVideo> leftovers = new ArrayList<>();
+
+        for (List<YouTubeVideo> channelVideos : byChannel.values()) {
+            List<YouTubeVideo> sorted = channelVideos.stream().sorted(BY_DATE_DESC).toList();
+            selected.add(sorted.get(0));
+            leftovers.addAll(sorted.subList(1, sorted.size()));
+        }
+
+        selected.sort(BY_DATE_DESC);
+        if (selected.size() >= limit) {
+            // More channels than slots — keep the most recent picks; nothing left to fill.
+            return new ArrayList<>(selected.subList(0, limit));
+        }
+
+        leftovers.sort(BY_DATE_DESC);
+        for (YouTubeVideo video : leftovers) {
+            if (selected.size() >= limit) {
+                break;
+            }
+            selected.add(video);
+        }
+
+        selected.sort(BY_DATE_DESC);
+        return selected;
+    }
+
+    private void logChannelFailure(ChannelInfo channel, int sweep, Exception e) {
+        System.err.println("Failed to fetch videos from " + channel.getName() + " (sweep " + sweep
+                + "): " + e.getClass().getSimpleName() + ": " + e.getMessage());
+        Throwable root = e;
+        while (root.getCause() != null && root.getCause() != root) {
+            root = root.getCause();
+        }
+        if (root != e) {
+            System.err.println("  root cause: " + root.getClass().getName() + ": " + root.getMessage());
+        }
+    }
+
+    private void pause(Duration duration) {
+        try {
+            Thread.sleep(duration.toMillis());
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted between YouTube channel sweeps", ie);
+        }
+    }
+
+    /**
+     * The videos to publish plus the channels that produced none, so the caller can fail the
+     * run loudly instead of quietly shipping a newsletter with a channel missing.
+     */
+    public record FetchResult(List<YouTubeVideo> videos, List<String> missingChannels) {
+        public boolean isComplete() {
+            return missingChannels.isEmpty();
+        }
     }
 
     /** Thrown when every channel feed fails, i.e. the section cannot be built at all. */
